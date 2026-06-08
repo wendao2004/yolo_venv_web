@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>城市道路智能检测系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app {
+            display: grid;
+            grid-template-rows: 60px 1fr;
+            grid-template-columns: 280px 1fr;
+            grid-template-areas:
+                "header header"
+                "sidebar main";
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .header {
+            grid-area: header;
+            background: linear-gradient(90deg, #0f3460, #16213e);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 2px solid #e94560;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            color: #e94560;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .status-badge.connected {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .status-badge.disconnected {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.connected {
+            background: #22c55e;
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .camera-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .camera-selector label {
+            font-size: 13px;
+            color: #888;
+            white-space: nowrap;
+        }
+
+        .camera-selector select {
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            min-width: 150px;
+        }
+
+        .camera-selector select:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .camera-selector select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        .camera-info {
+            font-size: 11px;
+            color: #888;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        .mode-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mode-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            background: transparent;
+            color: #888;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .folder-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .folder-selector label {
+            font-size: 13px;
+            color: #888;
+            white-space: nowrap;
+        }
+
+        .folder-selector input {
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 12px;
+            min-width: 200px;
+        }
+
+        .folder-selector input:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .folder-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            transition: all 0.3s;
+        }
+
+        .folder-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .folder-btn.primary {
+            background: #e94560;
+        }
+
+        .folder-btn.primary:hover {
+            background: #ff6b8a;
+        }
+
+        .image-count {
+            font-size: 11px;
+            color: #888;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 15px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item:last-child {
+            border-right: none;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #e94560;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #ff6b8a;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .sidebar {
+            grid-area: sidebar;
+            background: rgba(15, 52, 96, 0.8);
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #e94560;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: #e94560;
+            border-radius: 2px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateX(5px);
+        }
+
+        .stat-card .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .stat-card .info {
+            flex: 1;
+        }
+
+        .stat-card .class-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .stat-card .count {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .stat-card.water .icon {
+            background: rgba(255, 165, 0, 0.2);
+        }
+
+        .stat-card.water .class-name,
+        .stat-card.water .count {
+            color: #ffa500;
+        }
+
+        .stat-card.pothole .icon {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .stat-card.pothole .class-name,
+        .stat-card.pothole .count {
+            color: #ef4444;
+        }
+
+        .stat-card.missing .icon {
+            background: rgba(0, 255, 165, 0.2);
+        }
+
+        .stat-card.missing .class-name,
+        .stat-card.missing .count {
+            color: #00ffa5;
+        }
+
+        .stat-card.damaged .icon {
+            background: rgba(255, 255, 0, 0.2);
+        }
+
+        .stat-card.damaged .class-name,
+        .stat-card.damaged .count {
+            color: #ffff00;
+        }
+
+        .legend {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-title {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-color.water { background: #ffa500; }
+        .legend-color.pothole { background: #ef4444; }
+        .legend-color.missing { background: #00ffa5; }
+        .legend-color.damaged { background: #ffff00; }
+
+        .main {
+            grid-area: main;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-container {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .video-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-container .no-signal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+        }
+
+        .video-container .no-signal .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .video-container .no-signal .text {
+            font-size: 16px;
+        }
+
+        .detection-info {
+            background: rgba(15, 52, 96, 0.6);
+            border-radius: 10px;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e94560;
+        }
+
+        .detection-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .detection-tag {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .detection-tag.water {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+
+        .detection-tag.pothole {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .detection-tag.missing {
+            background: rgba(0, 255, 165, 0.2);
+            color: #00ffa5;
+        }
+
+        .detection-tag.damaged {
+            background: rgba(255, 255, 0, 0.2);
+            color: #ffff00;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">🚦 城市道路智能检测系统</div>
+                <div class="status-badge" id="connection-status">
+                    <span class="status-dot disconnected" id="status-dot"></span>
+                    <span id="status-text">未连接</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="mode-selector">
+                    <button class="mode-btn active" id="mode-camera" onclick="setMode('camera')">📷 摄像头</button>
+                    <button class="mode-btn" id="mode-images" onclick="setMode('images')">🖼️ 图片</button>
+                </div>
+                <div class="camera-selector" id="camera-selector-panel">
+                    <label>设备:</label>
+                    <select id="camera-select" onchange="selectCamera(this.value)">
+                        <option value="">扫描中...</option>
+                    </select>
+                    <span class="camera-info" id="camera-info"></span>
+                </div>
+                <div class="folder-selector" id="folder-selector-panel" style="display: none;">
+                    <label>📂 文件夹:</label>
+                    <input type="text" id="folder-path" placeholder="输入图片文件夹路径..." value="mosquito_det/integrated/images/val">
+                    <button class="folder-btn primary" onclick="loadTestImages()">加载</button>
+                    <span class="image-count" id="image-count">0 张</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">FPS</span>
+                    <span class="stat-value" id="fps">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">已处理帧数</span>
+                    <span class="stat-value" id="frame-count">0</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-reset" onclick="resetStats()">🔄 重置</button>
+                <button class="btn btn-primary" id="btn-reconnect" onclick="connectWebSocket()">🔗 重连</button>
+            </div>
+        </header>
+
+        <aside class="sidebar">
+            <div class="sidebar-title">实时统计</div>
+
+            <div class="stat-card water">
+                <div class="icon">💧</div>
+                <div class="info">
+                    <div class="class-name">积水</div>
+                    <div class="count" id="count-water">0</div>
+                </div>
+            </div>
+
+            <div class="stat-card pothole">
+                <div class="icon">🕳️</div>
+                <div class="info">
+                    <div class="class-name">坑洼</div>
+                    <div class="count" id="count-pothole">0</div>
+                </div>
+            </div>
+
+            <div class="stat-card missing">
+                <div class="icon">⭕</div>
+                <div class="info">
+                    <div class="class-name">井盖缺失</div>
+                    <div class="count" id="count-missing">0</div>
+                </div>
+            </div>
+
+            <div class="stat-card damaged">
+                <div class="icon">⚠️</div>
+                <div class="info">
+                    <div class="class-name">井盖破损</div>
+                    <div class="count" id="count-damaged">0</div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">图例说明</div>
+                <div class="legend-item">
+                    <div class="legend-color water"></div>
+                    <span>积水 (waterlogging)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color pothole"></div>
+                    <span>坑洼 (pothole)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color missing"></div>
+                    <span>井盖缺失 (manhole_missing)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color damaged"></div>
+                    <span>井盖破损 (manhole_damaged)</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div class="video-container">
+                <img id="video-feed" style="display: none;">
+                <div class="no-signal" id="no-signal">
+                    <div class="icon">📷</div>
+                    <div class="text">等待视频流...</div>
+                </div>
+            </div>
+
+            <div class="detection-info">
+                <div>
+                    <div class="info-label">当前帧检测</div>
+                    <div class="info-value" id="total-detections">0 个目标</div>
+                </div>
+                <div class="detection-tags" id="detection-tags">
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectTimeout = null;
+        let availableCameras = [];
+        let currentCameraIndex = null;
+        let currentMode = 'camera';
+        let totalStats = {
+            water: 0,
+            pothole: 0,
+            missing: 0,
+            damaged: 0
+        };
+
+        const classMap = {
+            '积水': 'water',
+            'waterlogging': 'water',
+            '坑洼': 'pothole',
+            'pothole': 'pothole',
+            '井盖缺失': 'missing',
+            'manhole_missing': 'missing',
+            '井盖破损': 'damaged',
+            'manhole_damaged': 'damaged'
+        };
+
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            updateConnectionStatus(false);
+            updateCameraList([]);
+
+            const wsPort = window.location.port === '8001' ? 8766 : 8765;
+            ws = new WebSocket('ws://localhost:' + wsPort);
+
+            ws.onopen = () => {
+                console.log('WebSocket 连接成功');
+                updateConnectionStatus(true);
+                if (reconnectTimeout) {
+                    clearTimeout(reconnectTimeout);
+                    reconnectTimeout = null;
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'camera_list') {
+                        handleCameraList(data);
+                    } else if (data.type === 'test_images_list') {
+                        handleTestImagesList(data);
+                    } else {
+                        handleMessage(data);
+                    }
+                } catch (e) {
+                    console.error('消息解析错误:', e);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket 连接断开');
+                updateConnectionStatus(false);
+                document.getElementById('video-feed').style.display = 'none';
+                document.getElementById('no-signal').style.display = 'block';
+                document.getElementById('camera-info').textContent = '';
+
+                if (!reconnectTimeout) {
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectTimeout = null;
+                        connectWebSocket();
+                    }, 3000);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket 错误:', error);
+            };
+        }
+
+        function updateConnectionStatus(connected) {
+            const badge = document.getElementById('connection-status');
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+
+            if (connected) {
+                badge.className = 'status-badge connected';
+                dot.className = 'status-dot connected';
+                text.textContent = '已连接';
+            } else {
+                badge.className = 'status-badge disconnected';
+                dot.className = 'status-dot disconnected';
+                text.textContent = '未连接';
+            }
+        }
+
+        function updateCameraList(cameras, currentIndex = null) {
+            availableCameras = cameras;
+            currentCameraIndex = currentIndex;
+            
+            const select = document.getElementById('camera-select');
+            select.innerHTML = '';
+            
+            if (cameras.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = '未检测到摄像头';
+                option.disabled = true;
+                select.appendChild(option);
+                return;
+            }
+
+            cameras.forEach((camera, index) => {
+                const option = document.createElement('option');
+                option.value = camera.index;
+                option.textContent = `${camera.name} (${camera.width}x${camera.height})`;
+                
+                if (currentIndex !== null && camera.index === currentIndex) {
+                    option.selected = true;
+                    updateCameraInfo(camera);
+                } else if (currentIndex === null && index === 0) {
+                    option.selected = true;
+                    updateCameraInfo(camera);
+                }
+                
+                select.appendChild(option);
+            });
+        }
+
+        function updateCameraInfo(camera) {
+            const info = document.getElementById('camera-info');
+            if (camera) {
+                info.textContent = `${camera.width}x${camera.height} @ ${camera.fps}fps`;
+            } else {
+                info.textContent = '';
+            }
+        }
+
+        function handleCameraList(data) {
+            console.log('收到摄像头列表:', data.cameras);
+            updateCameraList(data.cameras, data.current_camera);
+            
+            if (data.current_mode) {
+                currentMode = data.current_mode;
+                updateModeUI(data.current_mode);
+            }
+            
+            if (data.test_images_dir) {
+                document.getElementById('folder-path').value = data.test_images_dir;
+            }
+        }
+
+        function handleTestImagesList(data) {
+            console.log('收到测试图片列表:', data);
+            document.getElementById('image-count').textContent = data.count + ' 张';
+            document.getElementById('folder-path').value = data.directory;
+        }
+
+        function selectCamera(cameraIndex) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket 未连接');
+                return;
+            }
+
+            if (cameraIndex === '') {
+                return;
+            }
+
+            const index = parseInt(cameraIndex);
+            console.log('选择摄像头:', index);
+            
+            ws.send(JSON.stringify({
+                type: 'select_camera',
+                camera_index: index
+            }));
+
+            const camera = availableCameras.find(c => c.index === index);
+            if (camera) {
+                updateCameraInfo(camera);
+            }
+        }
+
+        function setMode(mode) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket 未连接');
+                return;
+            }
+
+            if (mode === currentMode) {
+                return;
+            }
+
+            console.log('切换模式:', mode);
+            currentMode = mode;
+            updateModeUI(mode);
+            
+            ws.send(JSON.stringify({
+                type: 'set_mode',
+                mode: mode
+            }));
+        }
+
+        function updateModeUI(mode) {
+            const cameraBtn = document.getElementById('mode-camera');
+            const imagesBtn = document.getElementById('mode-images');
+            const cameraPanel = document.getElementById('camera-selector-panel');
+            const folderPanel = document.getElementById('folder-selector-panel');
+
+            if (mode === 'camera') {
+                cameraBtn.className = 'mode-btn active';
+                imagesBtn.className = 'mode-btn';
+                cameraPanel.style.display = 'flex';
+                folderPanel.style.display = 'none';
+            } else {
+                cameraBtn.className = 'mode-btn';
+                imagesBtn.className = 'mode-btn active';
+                cameraPanel.style.display = 'none';
+                folderPanel.style.display = 'flex';
+            }
+        }
+
+        function loadTestImages() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket 未连接');
+                return;
+            }
+
+            const folderPath = document.getElementById('folder-path').value.trim();
+            if (!folderPath) {
+                alert('请输入图片文件夹路径');
+                return;
+            }
+
+            console.log('加载测试图片目录:', folderPath);
+            ws.send(JSON.stringify({
+                type: 'set_test_dir',
+                directory: folderPath
+            }));
+        }
+
+        function handleMessage(data) {
+            document.getElementById('video-feed').style.display = 'block';
+            document.getElementById('no-signal').style.display = 'none';
+
+            document.getElementById('video-feed').src = 'data:image/jpeg;base64,' + data.image;
+
+            document.getElementById('fps').textContent = data.fps || 0;
+            document.getElementById('frame-count').textContent = data.frame || 0;
+
+            if (data.camera_info) {
+                updateCameraInfo(data.camera_info);
+            }
+
+            const currentDetections = data.detections || {};
+            let currentTotal = 0;
+            const tags = [];
+
+            for (const [className, count] of Object.entries(currentDetections)) {
+                const key = classMap[className] || 'water';
+                if (totalStats[key] !== undefined) {
+                    if (count > 0) {
+                        totalStats[key] += count;
+                        currentTotal += count;
+                        tags.push({ key, name: className, count });
+                    }
+                }
+            }
+
+            document.getElementById('count-water').textContent = totalStats.water;
+            document.getElementById('count-pothole').textContent = totalStats.pothole;
+            document.getElementById('count-missing').textContent = totalStats.missing;
+            document.getElementById('count-damaged').textContent = totalStats.damaged;
+
+            document.getElementById('total-detections').textContent = currentTotal + ' 个目标';
+
+            const tagsContainer = document.getElementById('detection-tags');
+            if (tags.length > 0) {
+                tagsContainer.innerHTML = tags.map(tag =>
+                    `<span class="detection-tag ${tag.key}">${tag.name} ×${tag.count}</span>`
+                ).join('');
+            } else {
+                tagsContainer.innerHTML = '<span style="color: #666; font-size: 12px;">当前帧无检测目标</span>';
+            }
+        }
+
+        function resetStats() {
+            totalStats = { water: 0, pothole: 0, missing: 0, damaged: 0 };
+            document.getElementById('count-water').textContent = '0';
+            document.getElementById('count-pothole').textContent = '0';
+            document.getElementById('count-missing').textContent = '0';
+            document.getElementById('count-damaged').textContent = '0';
+        }
+
+        window.onload = () => {
+            connectWebSocket();
+        };
+    </script>
+</body>
+</html>
