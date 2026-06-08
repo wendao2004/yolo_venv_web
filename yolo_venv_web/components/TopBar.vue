@@ -1,60 +1,81 @@
 <template>
-  <view class="top-bar">
-    <view class="bar-section bar-left">
-      <view class="logo-dot"></view>
-      <text class="bar-title">道路积水与路病检测系统</text>
+  <view class="header">
+    <view class="header-left">
+      <text class="logo">🚦 城市道路智能检测系统</text>
+      <view class="status-badge" :class="connectionStatus.class">
+        <view class="status-dot" :class="connectionStatus.dot"></view>
+        <text class="status-text">{{ connectionStatus.text }}</text>
+      </view>
     </view>
     
-    <view class="bar-section bar-center">
-      <view class="status-group">
-        <view class="status-pill" :class="connectionStatus.class">
-          <view class="status-dot" :class="connectionStatus.dot"></view>
-          <text class="status-text">{{ connectionStatus.text }}</text>
+    <view class="header-right">
+      <view class="mode-selector">
+        <button 
+          class="mode-btn" 
+          :class="{ active: currentMode === 'camera' }"
+          @click="handleModeChange('camera')"
+        >
+          <text>📷 摄像头</text>
+        </button>
+        <button 
+          class="mode-btn" 
+          :class="{ active: currentMode === 'images' }"
+          @click="handleModeChange('images')"
+        >
+          <text>🖼️ 图片</text>
+        </button>
+      </view>
+      
+      <view class="camera-selector" v-if="currentMode === 'camera'">
+        <text class="selector-label">设备:</text>
+        <picker 
+          mode="selector" 
+          :range="cameraOptions" 
+          :value="selectedCameraIndex"
+          @change="handleCameraSelect"
+          class="camera-picker"
+        >
+          <view class="picker-display">
+            <text class="picker-text">{{ currentCameraName }}</text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+        <view class="camera-info" v-if="cameraInfoText">
+          <text class="info-text">{{ cameraInfoText }}</text>
         </view>
       </view>
       
-      <view class="divider"></view>
-      
-      <view class="metric" v-if="isConnected">
-        <text class="metric-label">状态</text>
-        <text class="metric-value" :class="isRunning ? 'value-active' : 'value-inactive'">
-          {{ isRunning ? '监测中' : '已暂停' }}
-        </text>
+      <view class="folder-selector" v-else>
+        <text class="selector-label">📂 文件夹:</text>
+        <input 
+          class="folder-input" 
+          :value="localFolderPath"
+          @input="onFolderInput"
+          placeholder="输入图片文件夹路径..."
+          @confirm="handleLoadImages"
+        />
+        <button class="folder-btn primary" @click="handleLoadImages">
+          <text>加载</text>
+        </button>
+        <view class="image-count" v-if="imageCount >= 0">
+          <text class="count-text">{{ imageCount }} 张</text>
+        </view>
       </view>
       
-      <view class="metric" v-if="isConnected">
-        <text class="metric-label">FPS</text>
-        <text class="metric-value">{{ fps }}</text>
+      <view class="stat-item">
+        <text class="stat-label">FPS</text>
+        <text class="stat-value">{{ fps }}</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-label">已处理帧数</text>
+        <text class="stat-value">{{ frameIndex }}</text>
       </view>
       
-      <view class="metric" v-if="isConnected">
-        <text class="metric-label">帧</text>
-        <text class="metric-value">{{ frameIndex }}</text>
-      </view>
-    </view>
-    
-    <view class="bar-section bar-right">
-      <button 
-        class="btn btn-primary"
-        v-if="!isConnected"
-        @click="$emit('reconnect')"
-      >
-        重新连接
+      <button class="btn btn-secondary" @click="$emit('reset')">
+        <text>🔄 重置</text>
       </button>
-      <button 
-        class="btn" 
-        :class="isRunning ? 'btn-warning' : 'btn-primary'"
-        v-if="isConnected"
-        @click="$emit('toggle')"
-      >
-        {{ isRunning ? '暂停' : '开始监测' }}
-      </button>
-      <button 
-        class="btn btn-default"
-        v-if="isConnected"
-        @click="$emit('reset')"
-      >
-        重置统计
+      <button class="btn btn-primary" @click="handleReconnect">
+        <text>🔗 重连</text>
       </button>
     </view>
   </view>
@@ -65,131 +86,156 @@ export default {
   name: 'TopBar',
   props: {
     isConnected: { type: Boolean, default: false },
-    isRunning: { type: Boolean, default: false },
     isReconnecting: { type: Boolean, default: false },
     reconnectAttempt: { type: Number, default: 0 },
-    fps: { type: Number, default: 0 },
-    frameIndex: { type: Number, default: 0 }
+    fps: { type: [Number, String], default: 0 },
+    frameIndex: { type: [Number, String], default: 0 },
+    currentMode: { type: String, default: 'camera' },
+    cameras: { type: Array, default: () => [] },
+    selectedCamera: { type: [Number, null], default: null },
+    cameraInfo: { type: Object, default: null },
+    folderPath: { type: String, default: '' },
+    imageCount: { type: Number, default: -1 }
+  },
+  data() {
+    return {
+      localFolderPath: this.folderPath || ''
+    }
+  },
+  watch: {
+    folderPath(newVal) {
+      this.localFolderPath = newVal || ''
+    }
   },
   computed: {
     connectionStatus() {
       if (this.isReconnecting) {
         return {
           text: '重连中 (' + this.reconnectAttempt + '/5)',
-          class: 'status-connecting',
-          dot: 'dot-connecting'
+          class: 'connected',
+          dot: 'connected'
         }
       }
       if (this.isConnected) {
         return {
           text: '已连接',
-          class: 'status-connected',
-          dot: 'dot-connected'
+          class: 'connected',
+          dot: 'connected'
         }
       }
       return {
         text: '未连接',
-        class: 'status-disconnected',
-        dot: 'dot-disconnected'
+        class: 'disconnected',
+        dot: 'disconnected'
       }
+    },
+    cameraOptions() {
+      if (!this.cameras || this.cameras.length === 0) {
+        return ['未检测到摄像头']
+      }
+      return this.cameras.map(c => `${c.name} (${c.width}x${c.height})`)
+    },
+    selectedCameraIndex() {
+      if (!this.cameras || this.cameras.length === 0) return 0
+      if (this.selectedCamera === null) return 0
+      const idx = this.cameras.findIndex(c => c.index === this.selectedCamera)
+      return idx >= 0 ? idx : 0
+    },
+    currentCameraName() {
+      if (!this.cameras || this.cameras.length === 0) {
+        return '未检测到摄像头'
+      }
+      const cam = this.cameras[this.selectedCameraIndex]
+      return cam ? `${cam.name} (${cam.width}x${cam.height})` : '请选择'
+    },
+    cameraInfoText() {
+      if (!this.cameraInfo) return ''
+      return `${this.cameraInfo.width}x${this.cameraInfo.height} @ ${this.cameraInfo.fps}fps`
+    }
+  },
+  methods: {
+    handleModeChange(mode) {
+      if (mode !== this.currentMode) {
+        this.$emit('mode-change', mode)
+      }
+    },
+    handleCameraSelect(e) {
+      const idx = e.detail.value
+      if (this.cameras && this.cameras[idx]) {
+        this.$emit('camera-select', this.cameras[idx].index)
+      }
+    },
+    onFolderInput(e) {
+      this.localFolderPath = e.detail.value || ''
+    },
+    handleLoadImages() {
+      if (this.localFolderPath && this.localFolderPath.trim()) {
+        this.$emit('load-images', this.localFolderPath.trim())
+      }
+    },
+    handleReconnect() {
+      this.$emit('reconnect')
     }
   }
 }
 </script>
 
 <style scoped lang="scss">
-.top-bar {
+.header {
+  grid-area: header;
+  background: linear-gradient(90deg, #0f3460, #16213e);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 56px;
-  padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  z-index: 100;
+  padding: 0 20px;
+  border-bottom: 2px solid #e94560;
+  height: 60px;
 }
 
-.bar-section {
+.header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
-.bar-left {
-  flex: 1;
+.logo {
+  font-size: 20px;
+  font-weight: bold;
+  color: #e94560;
 }
 
-.logo-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #007aff 0%, #0056b3 100%);
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-}
-
-.bar-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
-  letter-spacing: -0.02em;
-}
-
-.bar-center {
-  flex: 2;
-  justify-content: center;
-  gap: 24px;
-}
-
-.status-group {
+.status-badge {
   display: flex;
-  align-items: center;
-}
-
-.status-pill {
-  display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 9999px;
+  border-radius: 20px;
   font-size: 13px;
-  font-weight: 500;
 }
 
-.status-connected {
-  background: rgba(76, 217, 100, 0.1);
-  color: #16a34a;
+.status-badge.connected {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
 }
 
-.status-connecting {
-  background: rgba(240, 173, 78, 0.1);
-  color: #d97706;
-}
-
-.status-disconnected {
-  background: rgba(221, 82, 77, 0.1);
-  color: #dc2626;
+.status-badge.disconnected {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  animation: pulse 2s infinite;
 }
 
-.dot-connected {
+.status-dot.connected {
   background: #22c55e;
+  animation: pulse 1.5s infinite;
 }
 
-.dot-connecting {
-  background: #f59e0b;
-  animation: pulse 1s infinite;
-}
-
-.dot-disconnected {
+.status-dot.disconnected {
   background: #ef4444;
-  animation: none;
 }
 
 @keyframes pulse {
@@ -197,88 +243,214 @@ export default {
   50% { opacity: 0.5; }
 }
 
-.divider {
-  width: 1px;
-  height: 24px;
-  background: #e5e7eb;
+.status-text {
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.metric {
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mode-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  color: #888;
+  transition: all 0.3s;
+}
+
+.mode-btn.active {
+  background: #e94560;
+  color: #fff;
+}
+
+.mode-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.camera-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.folder-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.selector-label {
+  font-size: 13px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.camera-picker {
+  min-width: 150px;
+}
+
+.picker-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-width: 150px;
+}
+
+.picker-text {
+  font-size: 13px;
+  color: #fff;
+}
+
+.picker-arrow {
+  font-size: 10px;
+  color: #888;
+  margin-left: 8px;
+}
+
+.camera-info {
+  font-size: 11px;
+  color: #888;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.info-text {
+  font-size: 11px;
+  color: #888;
+}
+
+.folder-input {
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  min-width: 200px;
+}
+
+.folder-input::placeholder {
+  color: #666;
+}
+
+.folder-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  transition: all 0.3s;
+}
+
+.folder-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.folder-btn.primary {
+  background: #e94560;
+}
+
+.folder-btn.primary:hover {
+  background: #ff6b8a;
+}
+
+.image-count {
+  font-size: 11px;
+  color: #888;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.count-text {
+  font-size: 11px;
+  color: #888;
+}
+
+.stat-item {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  padding: 0 15px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.metric-label {
+.stat-item:last-child {
+  border-right: none;
+}
+
+.stat-label {
   font-size: 11px;
-  font-weight: 500;
-  color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  line-height: 1;
-  margin-bottom: 2px;
+  color: #888;
 }
 
-.metric-value {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-  font-variant-numeric: tabular-nums;
-}
-
-.value-active {
-  color: #007aff;
-}
-
-.value-inactive {
-  color: #9ca3af;
-}
-
-.bar-right {
-  flex: 1;
-  justify-content: flex-end;
-  gap: 12px;
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #e94560;
 }
 
 .btn {
   padding: 8px 16px;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
-  line-height: 1.5;
-}
-
-.btn:active {
-  transform: scale(0.98);
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.3s;
 }
 
 .btn-primary {
-  background: #007aff;
-  color: #ffffff;
+  background: #e94560;
+  color: #fff;
 }
 
 .btn-primary:hover {
-  background: #0066cc;
+  background: #ff6b8a;
 }
 
-.btn-warning {
-  background: #f0ad4e;
-  color: #ffffff;
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
-.btn-warning:hover {
-  background: #ec971f;
-}
-
-.btn-default {
-  background: #f3f4f6;
-  color: #4b5563;
-}
-
-.btn-default:hover {
-  background: #e5e7eb;
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>

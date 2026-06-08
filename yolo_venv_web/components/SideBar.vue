@@ -1,240 +1,217 @@
 <template>
   <view class="sidebar">
-    <view class="section">
-      <view class="section-header">
-        <text class="section-title">实时统计</text>
+    <view class="sidebar-title">
+      <text>实时统计</text>
+    </view>
+    
+    <view class="stat-card water">
+      <view class="icon">
+        <text>💧</text>
       </view>
-      
-      <view class="stats-grid">
-        <view 
-          v-for="item in statsList" 
-          :key="item.en" 
-          class="stat-card"
-          :style="{ '--accent': item.color }"
-        >
-          <view class="stat-icon" :style="{ backgroundColor: item.color + '20' }">
-            <text class="icon-text" :style="{ color: item.color }">{{ item.icon }}</text>
-          </view>
-          <view class="stat-content">
-            <text class="stat-name">{{ item.name }}</text>
-            <text class="stat-count">{{ item.count }}</text>
-          </view>
-        </view>
+      <view class="info">
+        <text class="class-name">积水</text>
+        <text class="count">{{ stats.waterlogging }}</text>
       </view>
     </view>
     
-    <view class="section info-section" v-if="isConnected">
-      <view class="section-header">
-        <text class="section-title">系统信息</text>
+    <view class="stat-card pothole">
+      <view class="icon">
+        <text>🕳️</text>
       </view>
-      
-      <view class="info-list">
-        <view class="info-item">
-          <text class="info-label">平均置信度</text>
-          <text class="info-value">{{ avgConfidence }}%</text>
-        </view>
-        <view class="info-item">
-          <text class="info-label">WebSocket</text>
-          <text class="info-value connected">已连接</text>
-        </view>
+      <view class="info">
+        <text class="class-name">坑洼</text>
+        <text class="count">{{ stats.pothole }}</text>
       </view>
     </view>
     
-    <view class="section legend-section">
-      <view class="section-header">
-        <text class="section-title">类别图例</text>
+    <view class="stat-card missing">
+      <view class="icon">
+        <text>⭕</text>
       </view>
-      
-      <view class="legend-list">
-        <view class="legend-item" v-for="item in statsList" :key="item.en">
-          <view class="legend-dot" :style="{ backgroundColor: item.color }"></view>
-          <text class="legend-text">{{ item.name }}</text>
-        </view>
+      <view class="info">
+        <text class="class-name">井盖缺失</text>
+        <text class="count">{{ stats.manhole_missing }}</text>
+      </view>
+    </view>
+    
+    <view class="stat-card damaged">
+      <view class="icon">
+        <text>⚠️</text>
+      </view>
+      <view class="info">
+        <text class="class-name">井盖破损</text>
+        <text class="count">{{ stats.manhole_damaged }}</text>
+      </view>
+    </view>
+    
+    <view class="legend">
+      <text class="legend-title">图例说明</text>
+      <view class="legend-item">
+        <view class="legend-color water"></view>
+        <text>积水 (waterlogging)</text>
+      </view>
+      <view class="legend-item">
+        <view class="legend-color pothole"></view>
+        <text>坑洼 (pothole)</text>
+      </view>
+      <view class="legend-item">
+        <view class="legend-color missing"></view>
+        <text>井盖缺失 (manhole_missing)</text>
+      </view>
+      <view class="legend-item">
+        <view class="legend-color damaged"></view>
+        <text>井盖破损 (manhole_damaged)</text>
       </view>
     </view>
   </view>
 </template>
 
 <script>
-import { CLASS_MAP } from '@/utils/classMap.js'
+import { CLASS_STATS_INIT } from '@/utils/classMap.js'
 
 export default {
   name: 'SideBar',
   props: {
     stats: {
       type: Object,
-      default: () => ({
-        waterlogging: 0,
-        pothole: 0,
-        manhole_missing: 0,
-        manhole_damaged: 0
-      })
+      default: () => ({ ...CLASS_STATS_INIT })
     },
-    isConnected: { type: Boolean, default: false },
-    avgConfidence: { type: Number, default: 0 }
-  },
-  computed: {
-    statsList() {
-      const icons = {
-        waterlogging: '💧',
-        pothole: '🕳️',
-        manhole_missing: '⚠️',
-        manhole_damaged: '🔧'
-      }
-      return Object.entries(CLASS_MAP).map(([id, info]) => ({
-        ...info,
-        count: this.stats[info.en] || 0,
-        icon: icons[info.en] || '●'
-      }))
-    }
+    isConnected: { type: Boolean, default: false }
   }
 }
 </script>
 
 <style scoped lang="scss">
 .sidebar {
-  width: 100%;
-  height: 100%;
-  background: #ffffff;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.section {
+  grid-area: sidebar;
+  background: rgba(15, 52, 96, 0.8);
   padding: 20px;
-  border-bottom: 1px solid #f3f4f6;
+  overflow-y: auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.section:last-child {
-  border-bottom: none;
-}
-
-.info-section,
-.legend-section {
-  background: #fafafa;
-}
-
-.section-header {
-  margin-bottom: 16px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #374151;
-  letter-spacing: -0.01em;
-}
-
-.stats-grid {
+.sidebar-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #e94560;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: #e94560;
+  border-radius: 2px;
 }
 
 .stat-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
+  transition: transform 0.3s;
 }
 
-.stat-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+.stat-card:active {
+  transform: translateX(5px);
 }
 
-.stat-icon {
+.stat-card .icon {
   width: 40px;
   height: 40px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  font-size: 18px;
 }
 
-.icon-text {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.stat-content {
-  display: flex;
-  flex-direction: column;
+.stat-card .info {
   flex: 1;
-  min-width: 0;
 }
 
-.stat-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #6b7280;
-  margin-bottom: 2px;
-}
-
-.stat-count {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1f2937;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.info-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.info-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.info-label {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.info-value {
+.stat-card .class-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
-  font-variant-numeric: tabular-nums;
 }
 
-.info-value.connected {
-  color: #16a34a;
+.stat-card .count {
+  font-size: 24px;
+  font-weight: bold;
+  margin-top: 4px;
 }
 
-.legend-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.stat-card.water .icon {
+  background: rgba(255, 165, 0, 0.2);
+}
+
+.stat-card.water .class-name,
+.stat-card.water .count {
+  color: #ffa500;
+}
+
+.stat-card.pothole .icon {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.stat-card.pothole .class-name,
+.stat-card.pothole .count {
+  color: #ef4444;
+}
+
+.stat-card.missing .icon {
+  background: rgba(0, 255, 165, 0.2);
+}
+
+.stat-card.missing .class-name,
+.stat-card.missing .count {
+  color: #00ffa5;
+}
+
+.stat-card.damaged .icon {
+  background: rgba(255, 255, 0, 0.2);
+}
+
+.stat-card.damaged .class-name,
+.stat-card.damaged .count {
+  color: #ffff00;
+}
+
+.legend {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.legend-title {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 15px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.legend-text {
+  padding: 8px 0;
   font-size: 13px;
-  color: #4b5563;
 }
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.legend-color.water { background: #ffa500; }
+.legend-color.pothole { background: #ef4444; }
+.legend-color.missing { background: #00ffa5; }
+.legend-color.damaged { background: #ffff00; }
 </style>
