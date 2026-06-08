@@ -2,12 +2,19 @@
   <view class="page">
     <TopBar 
       :is-connected="isConnected"
-      :is-running="isRunning"
       :is-reconnecting="isReconnecting"
       :reconnect-attempt="reconnectAttempt"
       :fps="fps"
       :frame-index="frameIndex"
-      @toggle="toggleMonitor"
+      :current-mode="currentMode"
+      :cameras="cameras"
+      :selected-camera="selectedCamera"
+      :camera-info="cameraInfo"
+      :folder-path="folderPath"
+      :image-count="imageCount"
+      @mode-change="handleModeChange"
+      @camera-select="handleCameraSelect"
+      @load-images="handleLoadImages"
       @reset="resetStats"
       @reconnect="reconnect"
     />
@@ -15,16 +22,12 @@
     <SideBar 
       :stats="stats"
       :is-connected="isConnected"
-      :avg-confidence="avgConfidence"
     />
     
     <VideoDisplay 
       :image="currentImage"
       :is-connected="isConnected"
-      :is-running="isRunning"
       :detections="currentDetections"
-      @start="startMonitor"
-      @reconnect="reconnect"
     />
     
     <view class="error-banner" v-if="showErrorBanner">
@@ -42,7 +45,7 @@ import TopBar from '@/components/TopBar.vue'
 import SideBar from '@/components/SideBar.vue'
 import VideoDisplay from '@/components/VideoDisplay.vue'
 import DetectSocket from '@/api/websocket.js'
-import { getClassKey, CLASS_STATS_INIT } from '@/utils/classMap.js'
+import { CLASS_STATS_INIT, mapBackendKey } from '@/utils/classMap.js'
 
 export default {
   name: 'DetectDashboard',
@@ -55,24 +58,20 @@ export default {
     return {
       socket: null,
       isConnected: false,
-      isRunning: false,
       isReconnecting: false,
       reconnectAttempt: 0,
       currentImage: '',
       frameIndex: 0,
       fps: 0,
-      frameTimes: [],
-      currentDetections: [],
+      currentDetections: {},
       stats: { ...CLASS_STATS_INIT },
-      confidenceSum: 0,
-      confidenceCount: 0,
-      showErrorBanner: false
-    }
-  },
-  computed: {
-    avgConfidence() {
-      if (this.confidenceCount === 0) return 0
-      return Math.round((this.confidenceSum / this.confidenceCount) * 100)
+      showErrorBanner: false,
+      currentMode: 'camera',
+      cameras: [],
+      selectedCamera: null,
+      cameraInfo: null,
+      folderPath: 'mosquito_det/integrated/images/val',
+      imageCount: -1
     }
   },
   onLoad() {
@@ -107,7 +106,9 @@ export default {
       
       this.socket.on('disconnected', () => {
         this.isConnected = false
-        this.isRunning = false
+        this.cameras = []
+        this.selectedCamera = null
+        this.cameraInfo = null
         if (!this.isReconnecting) {
           this.showErrorBanner = true
         }
@@ -123,12 +124,15 @@ export default {
         this.handleFrame(data)
       })
       
-      this.socket.on('started', () => {
-        this.isRunning = true
+      this.socket.on('cameraList', (data) => {
+        this.handleCameraList(data)
       })
       
-      this.socket.on('paused', () => {
-        this.isRunning = false
+      this.socket.on('testImagesList', (data) => {
+        this.imageCount = data.count
+        if (data.directory) {
+          this.folderPath = data.directory
+        }
       })
       
       this.socket.connect().catch(() => {})
@@ -137,65 +141,63 @@ export default {
     handleFrame(data) {
       this.currentImage = data.image
       this.frameIndex = data.frameIndex
-      this.currentDetections = data.detections || []
+      this.fps = data.fps
+      this.currentDetections = data.detections || {}
       
-      const now = Date.now()
-      this.frameTimes.push(now)
-      if (this.frameTimes.length > 30) {
-        this.frameTimes.shift()
-      }
-      if (this.frameTimes.length > 1) {
-        const duration = (this.frameTimes[this.frameTimes.length - 1] - this.frameTimes[0]) / 1000
-        this.fps = Math.round((this.frameTimes.length - 1) / duration)
+      if (data.cameraInfo) {
+        this.cameraInfo = data.cameraInfo
       }
       
-      if (data.detections && data.detections.length > 0) {
-        data.detections.forEach(d => {
-          const key = getClassKey(d.classId)
-          if (key) {
-            this.stats[key]++
+      if (data.detections) {
+        for (const [backendKey, count] of Object.entries(data.detections)) {
+          const localKey = mapBackendKey(backendKey)
+          if (localKey && this.stats[localKey] !== undefined && count > 0) {
+            this.stats[localKey] += count
           }
-          if (d.confidence) {
-            this.confidenceSum += d.confidence
-            this.confidenceCount++
-          }
-        })
+        }
       }
     },
     
-    toggleMonitor() {
-      if (this.isRunning) {
-        this.pauseMonitor()
-      } else {
-        this.startMonitor()
+    handleCameraList(data) {
+      this.cameras = data.cameras || []
+      this.selectedCamera = data.currentCamera
+      
+      if (data.currentMode) {
+        this.currentMode = data.currentMode
+      }
+      
+      if (data.testImagesDir) {
+        this.folderPath = data.testImagesDir
       }
     },
     
-    startMonitor() {
-      if (!this.isConnected) {
-        uni.showToast({ title: '请先连接后端', icon: 'none', duration: 2000 })
-        return
+    handleModeChange(mode) {
+      if (this.socket) {
+        this.socket.setMode(mode)
+        this.currentMode = mode
       }
-      this.socket.start()
-      this.isRunning = true
     },
     
-    pauseMonitor() {
-      this.socket.pause()
-      this.isRunning = false
+    handleCameraSelect(cameraIndex) {
+      if (this.socket) {
+        this.socket.selectCamera(cameraIndex)
+        this.selectedCamera = cameraIndex
+      }
+    },
+    
+    handleLoadImages(folderPath) {
+      if (this.socket) {
+        this.socket.setTestDir(folderPath)
+        this.folderPath = folderPath
+      }
     },
     
     resetStats() {
       this.stats = { ...CLASS_STATS_INIT }
       this.frameIndex = 0
-      this.frameTimes = []
       this.fps = 0
-      this.currentDetections = []
-      this.confidenceSum = 0
-      this.confidenceCount = 0
-      if (this.isConnected) {
-        this.socket.reset()
-      }
+      this.currentDetections = {}
+      this.currentImage = ''
       uni.showToast({ title: '统计已重置', icon: 'success', duration: 1500 })
     },
     
@@ -204,8 +206,14 @@ export default {
         this.socket.close()
       }
       this.currentImage = ''
-      this.currentDetections = []
+      this.currentDetections = {}
       this.showErrorBanner = false
+      this.fps = 0
+      this.frameIndex = 0
+      this.cameras = []
+      this.selectedCamera = null
+      this.cameraInfo = null
+      this.imageCount = -1
       this.initSocket()
     }
   }
@@ -223,7 +231,7 @@ page {
 <style scoped lang="scss">
 .page {
   display: grid;
-  grid-template-rows: 56px 1fr;
+  grid-template-rows: 60px 1fr;
   grid-template-columns: 280px 1fr;
   grid-template-areas:
     "header header"
@@ -231,7 +239,7 @@ page {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #f9fafb;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
 }
 
 .page > :first-child {
@@ -240,12 +248,12 @@ page {
 
 .page > :nth-child(2) {
   grid-area: sidebar;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 60px);
 }
 
 .page > :nth-child(3) {
   grid-area: main;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 60px);
 }
 
 .error-banner {
@@ -261,10 +269,9 @@ page {
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 
 .error-icon {
@@ -274,12 +281,12 @@ page {
 .error-text {
   font-size: 14px;
   font-weight: 500;
-  color: #991b1b;
+  color: #ef4444;
 }
 
 .error-btn {
   padding: 8px 16px;
-  background: #dc2626;
+  background: #ef4444;
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -289,6 +296,6 @@ page {
 }
 
 .error-btn:active {
-  background: #b91c1c;
+  background: #dc2626;
 }
 </style>
