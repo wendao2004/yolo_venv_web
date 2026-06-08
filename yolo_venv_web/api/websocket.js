@@ -1,33 +1,42 @@
 class DetectSocket {
-  constructor(url = 'ws://localhost:8000/ws/detect') {
-    this.url = url
+  constructor() {
     this.socket = null
-    this.isConnected = false
     this.listeners = {}
     this.reconnectAttempts = 0
     this.maxReconnectAttempts = 5
-    this.reconnectDelay = 1000
+    this.reconnectDelay = 3000
     this.isManuallyClosed = false
+  }
+
+  getUrl() {
+    const pagePort = window?.location?.port || ''
+    
+    if (pagePort === '8001') {
+      return 'ws://localhost:8766'
+    }
+    
+    const searchParams = new URLSearchParams(window?.location?.search || '')
+    const wsPort = searchParams.get('wsPort') || '8766'
+    
+    return 'ws://localhost:' + wsPort
   }
 
   connect() {
     return new Promise((resolve, reject) => {
-      if (this.isConnected) {
-        resolve()
-        return
+      if (this.socket) {
+        this.socket.close()
       }
 
       this.isManuallyClosed = false
       
       const socketTask = uni.connectSocket({
-        url: this.url,
+        url: this.getUrl(),
         complete: () => {}
       })
 
       this.socket = socketTask
 
       uni.onSocketOpen(() => {
-        this.isConnected = true
         this.reconnectAttempts = 0
         this.emit('connected')
         resolve()
@@ -36,34 +45,49 @@ class DetectSocket {
       uni.onSocketMessage((res) => {
         try {
           const data = JSON.parse(res.data)
-          this.emit('message', data)
-          if (data.type === 'frame') {
-            this.emit('frame', data)
-          } else if (data.type === 'connected') {
-            this.emit('server-connected', data)
-          } else if (data.type === 'started') {
-            this.emit('started', data)
-          } else if (data.type === 'paused') {
-            this.emit('paused', data)
-          }
+          this.handleMessage(data)
         } catch (e) {
           console.error('消息解析失败:', e)
         }
       })
 
       uni.onSocketError((err) => {
-        this.isConnected = false
         this.emit('error', err)
         reject(err)
         this.attemptReconnect()
       })
 
       uni.onSocketClose(() => {
-        this.isConnected = false
         this.emit('disconnected')
         this.attemptReconnect()
       })
     })
+  }
+
+  handleMessage(data) {
+    this.emit('message', data)
+    
+    if (data.type === 'camera_list') {
+      this.emit('cameraList', {
+        cameras: data.cameras || [],
+        currentCamera: data.current_camera,
+        currentMode: data.current_mode,
+        testImagesDir: data.test_images_dir
+      })
+    } else if (data.type === 'test_images_list') {
+      this.emit('testImagesList', {
+        count: data.count,
+        directory: data.directory
+      })
+    } else {
+      this.emit('frame', {
+        image: data.image,
+        fps: data.fps || 0,
+        frameIndex: data.frame || 0,
+        cameraInfo: data.camera_info,
+        detections: data.detections || {}
+      })
+    }
   }
 
   attemptReconnect() {
@@ -74,18 +98,37 @@ class DetectSocket {
     this.reconnectAttempts++
     this.emit('reconnecting', { attempt: this.reconnectAttempts, max: this.maxReconnectAttempts })
     
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
     setTimeout(() => {
       if (!this.isManuallyClosed) {
         this.connect().catch(() => {})
       }
-    }, delay)
+    }, this.reconnectDelay)
   }
 
   send(data) {
-    if (!this.isConnected) return
     uni.sendSocketMessage({
       data: JSON.stringify(data)
+    })
+  }
+
+  selectCamera(cameraIndex) {
+    this.send({
+      type: 'select_camera',
+      camera_index: cameraIndex
+    })
+  }
+
+  setMode(mode) {
+    this.send({
+      type: 'set_mode',
+      mode: mode
+    })
+  }
+
+  setTestDir(directory) {
+    this.send({
+      type: 'set_test_dir',
+      directory: directory
     })
   }
 
