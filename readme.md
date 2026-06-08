@@ -49,6 +49,94 @@ WebSocket: ws://localhost:8766
 HTTP Demo: http://localhost:8001/index.html
 ```
 
+### 4. H5 打包
+
+#### 4.1 打包步骤
+
+1. 用 HBuilderX 打开 `yolo_venv_web/` 目录
+2. 菜单 → **发行** → **网站-PC Web 或手机 H5**
+3. 填写配置：
+   - 网站标题：城市道路智能检测系统
+   - 域名（可选）：`./`（本地运行用相对路径）
+4. 点击 **发行**
+
+#### 4.2 打包输出位置
+
+```
+yolo_venv_web/
+└── unpackage/
+    └── dist/
+        └── build/
+            └── h5/              ← 打包输出目录
+                ├── index.html
+                ├── static/
+                └── ...
+```
+
+#### 4.3 本地运行打包产物
+
+**⚠️ 重要**：H5 打包后是静态文件，**不能直接双击打开**，必须通过 HTTP 服务器运行。
+
+**方案一：Python 内置服务器（推荐）**
+
+```bash
+# 进入打包目录
+cd yolo_venv_web/unpackage/dist/build/h5
+
+# 启动 HTTP 服务器（Python 3）
+python -m http.server 8080
+
+# 或 Python 2
+python -m SimpleHTTPServer 8080
+```
+
+浏览器访问：
+```
+http://localhost:8080
+```
+
+**方案二：Node.js http-server**
+
+```bash
+# 全局安装
+npm install -g http-server
+
+# 进入打包目录
+cd yolo_venv_web/unpackage/dist/build/h5
+
+# 启动服务器
+http-server -p 8080
+```
+
+**方案三：VS Code Live Server 插件**
+
+1. VS Code 安装 **Live Server** 插件
+2. 右键点击打包生成的 `index.html`
+3. 选择 **Open with Live Server**
+
+#### 4.4 打包后的 WebSocket 连接
+
+打包后页面运行在 `http://localhost:8080`，会自动连接 WebSocket：
+
+```
+# 默认连接 8766
+http://localhost:8080
+
+# 指定连接其他端口（如病虫害检测后端）
+http://localhost:8080/?wsPort=8765
+
+# 垃圾分类检测
+http://localhost:8080/?wsPort=9000
+```
+
+#### 4.5 常见问题
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| 双击 index.html 空白 | 浏览器跨域限制 | 必须用 HTTP 服务器，不能用 `file://` |
+| WebSocket 连接失败 | 后端未启动 | 先启动 `python server.py` |
+| 端口被占用 | 8080 被其他程序使用 | 换端口：`python -m http.server 9000` |
+
 ---
 
 ## ⭐ 后端对接配置
@@ -67,12 +155,20 @@ const wsPort = searchParams.get('wsPort') || '8765'
 
 ### 运行时切换端口（无需改代码）
 
-访问时添加查询参数：
+访问时添加查询参数 `?wsPort=端口号`：
 
+**开发环境（HBuilderX 运行到浏览器）**：
 ```
 http://localhost:5173/?wsPort=8765
 http://localhost:5173/?wsPort=8766
 http://localhost:5173/?wsPort=9000
+```
+
+**打包后（HTTP 服务器运行）**：
+```
+http://localhost:8080/?wsPort=8765
+http://localhost:8080/?wsPort=8766
+http://localhost:8080/?wsPort=9000
 ```
 
 ### WebSocket 消息协议
