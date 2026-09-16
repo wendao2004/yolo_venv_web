@@ -1,19 +1,93 @@
 {
 	"pages": [
+		
 		{
-			"path": "pages/index/index",
+			"path": "pages/login/login",
 			"style": {
 				"navigationStyle": "custom",
-				"navigationBarTitleText": "道路积水检测系统"
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/index/index",
+			
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "实时智检"
+			}
+		},
+		{
+			
+			"path": "pages/score/score",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "自动打分"
+			}
+		},
+		{
+			
+			"path": "pages/workorder/workorder",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "工单管理"
+			}
+		},
+		{
+			
+			"path": "pages/hardware/hardware",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "硬件状态"
+			}
+		},
+		{
+			
+			"path": "pages/register/register",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "注册"
 			}
 		}
 	],
 	"globalStyle": {
 		"navigationStyle": "custom",
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "道路积水检测系统",
-		"navigationBarBackgroundColor": "#ffffff",
-		"backgroundColor": "#f9fafb"
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "道路智能检测系统",
+		"navigationBarBackgroundColor": "#0a0a0f",
+		"backgroundColor": "#0a0a0f",
+		"backgroundColorTop": "#0a0a0f",
+		"backgroundColorBottom": "#0a0a0f"
+	},
+	"tabBar": {
+		"color": "#6b7280",
+		"selectedColor": "#4f46e5",
+		"backgroundColor": "#111118",
+		"borderStyle": "black",
+		"list": [{
+				"pagePath": "pages/index/index",
+				"text": "智检",
+				"iconPath": "static/tab-detect.png",
+				"selectedIconPath": "static/tab-detect-active.png"
+			},
+			{
+				"pagePath": "pages/score/score",
+				"text": "打分",
+				"iconPath": "static/tab-score.png",
+				"selectedIconPath": "static/tab-score-active.png"
+			},
+			{
+				"pagePath": "pages/workorder/workorder",
+				"text": "工单",
+				"iconPath": "static/tab-order.png",
+				"selectedIconPath": "static/tab-order-active.png"
+			},
+			{
+				"pagePath": "pages/hardware/hardware",
+				"text": "硬件",
+				"iconPath": "static/tab-hardware.png",
+				"selectedIconPath": "static/tab-hardware-active.png"
+			}
+		]
 	},
 	"uniIdRouter": {}
 }

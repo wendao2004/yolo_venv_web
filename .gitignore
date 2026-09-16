@@ -2,3 +2,5 @@
 .DS_Store
 node_modules/
 dist/
+yolo_venv_web/uni_modules
+yolo_venv_web/uniCloud-alipay
