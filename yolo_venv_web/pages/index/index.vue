@@ -4,7 +4,9 @@
 		<view class="header">
 			<view class="header-left">
 				<view class="logo">
-					<view class="logo-icon"><text>🚦</text></view>
+					<!-- <view class="logo-icon"><text>🚦</text></view> -->
+					
+					<image src="/static/logo.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
 					<text class="logo-text">道路检测</text>
 				</view>
 			</view>
@@ -47,10 +49,12 @@
 			<view class="control-panel">
 				<view class="mode-switch">
 					<view class="switch-item" :class="{ active: currentMode === 'camera' }" @click="setMode('camera')">
-						<text>📷 摄像头</text>
+						<image src="/static/Camera_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
+						<text>摄像头</text>
 					</view>
 					<view class="switch-item" :class="{ active: currentMode === 'images' }" @click="setMode('images')">
-						<text>🖼️ 图片</text>
+						<image src="/static/picture_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
+						<text>图片</text>
 					</view>
 				</view>
 				<view class="source-selector" v-if="currentMode === 'camera'">
@@ -821,6 +825,10 @@
 		background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
 		color: #fff;
 		box-shadow: 0 4px 12px var(--accent-glow);
+		display: flex;
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
 	}
 
 	.source-selector {

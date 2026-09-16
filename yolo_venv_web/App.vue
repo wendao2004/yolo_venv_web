@@ -176,7 +176,7 @@
 		--border-color: #e2e8f0;
 		--border-light: #f1f5f9;
 		
-		--accent: #4f46e5;
+		--accent: #74728b;
 		--accent-light: #7c3aed;
 		--accent-dark: #3730a3;
 		--accent-glow: rgba(79, 70, 229, 0.15);
