@@ -1,0 +1,7 @@
+{
+  "name": "Web_zhihuNews",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

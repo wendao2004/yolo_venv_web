@@ -1,0 +1,12 @@
+{
+  "name": "api-main",
+  "main": "dist/index.js",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "js-md5": "^0.8.3",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

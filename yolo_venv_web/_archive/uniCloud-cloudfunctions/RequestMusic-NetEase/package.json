@@ -1,0 +1,7 @@
+{
+  "name": "RequestMusic-NetEase",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

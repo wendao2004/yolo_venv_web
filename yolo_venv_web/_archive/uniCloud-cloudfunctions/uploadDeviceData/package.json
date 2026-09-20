@@ -1,0 +1,7 @@
+{
+  "name": "uploadDeviceData",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

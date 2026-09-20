@@ -1,0 +1,19 @@
+{
+    "name": "Vheart-Model",
+    "main": "dist/index.js",
+    "dependencies": {
+        "esbuild-node-tsc": "^2.0.5",
+        "nodemon": "^3.1.14",
+        "typescript": "5.5.4"
+    },
+    "extensions": {
+        "uni-cloud-jql": {}
+    },
+    "scripts": {
+        "dev": "nodemon",
+        "build": "node build.js"
+    },
+    "devDependencies": {
+        "esbuild": "^0.28.2"
+    }
+}

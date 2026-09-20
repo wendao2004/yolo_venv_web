@@ -10,8 +10,8 @@
 				<view class="logo-wrapper">
 					<image src="../../static/logo.png" class="logo" mode="aspectFit"></image>
 				</view>
-				<text class="app-name">Vheart-Chat</text>
-				<text class="app-slogan">连接心灵，畅所欲言</text>
+				<text class="app-name">道路病害巡检</text>
+				<text class="app-slogan">轻量检测 · 跨端告警</text>
 			</view>
 			<view class="register-card">
 				<view class="register-form">

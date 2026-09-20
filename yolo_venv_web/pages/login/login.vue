@@ -84,8 +84,10 @@
 
 	const checkAutoLogin = () => {
 		if (globalUser.isLogin) {
+			// 原为 '/pages/chat/chat'——那是模板残留，本项目没有这个页面（见 pages.json），
+			// 自动登录会静默跳转失败。改用真实的 tabBar 首页。
 			uni.switchTab({
-				url: '/pages/chat/chat'
+				url: '/pages/index/index'
 			});
 		}
 	};

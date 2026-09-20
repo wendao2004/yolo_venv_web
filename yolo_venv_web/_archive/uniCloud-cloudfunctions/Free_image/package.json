@@ -1,0 +1,16 @@
+{
+    "name": "Free_image",
+    "dependencies": [],
+    "extensions": {
+        "uni-cloud-jql": []
+    },
+    "main": "index.js",
+    "version": "1.0.0",
+    "cloudfunction-config": {
+        "memorySize": 512,
+        "timeout": 5,
+        "triggers": [],
+        "path": "",
+        "runtime": "Nodejs16"
+    }
+}

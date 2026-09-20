@@ -1,0 +1,7 @@
+{
+  "name": "weixinLogin",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

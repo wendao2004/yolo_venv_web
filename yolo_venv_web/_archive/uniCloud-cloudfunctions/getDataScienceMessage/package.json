@@ -1,0 +1,7 @@
+{
+  "name": "getDataScienceMessage",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

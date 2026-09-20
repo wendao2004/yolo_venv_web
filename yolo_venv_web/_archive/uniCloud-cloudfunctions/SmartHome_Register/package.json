@@ -1,0 +1,7 @@
+{
+  "name": "SmartHome_Register",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

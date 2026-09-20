@@ -1,0 +1,7 @@
+{
+  "name": "TextDungeon_UserData",
+  "dependencies": {"bcryptjs": "^2.4.3"},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

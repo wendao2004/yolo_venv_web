@@ -5,7 +5,6 @@
 			<view class="header-left">
 				<view class="logo">
 					<!-- <view class="logo-icon"><text>🚦</text></view> -->
-					
 					<image src="/static/logo.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
 					<text class="logo-text">道路检测</text>
 				</view>
@@ -26,7 +25,7 @@
 				<view class="video-wrapper">
 					<image v-if="currentImage" :src="imageSrc" mode="aspectFit" class="video-frame"></image>
 					<view v-else class="video-placeholder">
-						<text class="placeholder-icon">📷</text>
+						<!-- <text class="placeholder-icon">📷</text> -->
 						<text class="placeholder-text">等待视频流...</text>
 					</view>
 					<view class="video-overlay">
@@ -49,11 +48,13 @@
 			<view class="control-panel">
 				<view class="mode-switch">
 					<view class="switch-item" :class="{ active: currentMode === 'camera' }" @click="setMode('camera')">
-						<image src="/static/Camera_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
+						<image src="/static/Camera_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;">
+						</image>
 						<text>摄像头</text>
 					</view>
 					<view class="switch-item" :class="{ active: currentMode === 'images' }" @click="setMode('images')">
-						<image src="/static/picture_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;"></image>
+						<image src="/static/picture_dark.png" mode="aspectFill" style="width: 72rpx;height: 72rpx;">
+						</image>
 						<text>图片</text>
 					</view>
 				</view>
@@ -77,22 +78,22 @@
 				<text class="section-title">检测统计</text>
 				<view class="stats-grid">
 					<view class="stat-card water">
-						<view class="stat-icon">💧</view>
+						<image src="/static/water.png" mode="" style="width: 72rpx;height: 72rpx;"></image>
 						<view class="stat-info"><text class="stat-label">积水</text><text
 								class="stat-value">{{ stats.waterlogging }}</text></view>
 					</view>
 					<view class="stat-card pothole">
-						<view class="stat-icon">🕳️</view>
+						<image src="/static/pit.png" mode="" style="width: 72rpx;height: 72rpx;"></image>
 						<view class="stat-info"><text class="stat-label">坑洼</text><text
 								class="stat-value">{{ stats.pothole }}</text></view>
 					</view>
 					<view class="stat-card manhole">
-						<view class="stat-icon">🔵</view>
+						<image src="/static/warning.png" mode="" style="width: 52rpx;height: 52rpx;"></image>
 						<view class="stat-info"><text class="stat-label">井盖异常</text><text
 								class="stat-value">{{ stats.manhole }}</text></view>
 					</view>
 					<view class="stat-card crack">
-						<view class="stat-icon">⚡</view>
+						<image src="/static/Crack.png" mode="" style="width: 62rpx;height: 62rpx;"></image>
 						<view class="stat-info"><text class="stat-label">道路裂纹</text><text
 								class="stat-value">{{ stats.crack }}</text></view>
 					</view>
@@ -227,7 +228,10 @@
 				cameras: [],
 				selectedCamera: null,
 				cameraInfo: null,
-				folderPath: 'mosquito_det/integrated/images/val',
+				// 原为 'mosquito_det/integrated/images/val'——那是来源项目（蚊子检测）
+				// 的路径，服务端**不存在**这个目录，连通后自动打分会拿不到图。
+				// 改用 server.py 实际写入的截图目录（SAVED_IMAGES_DIR = "saved_captures"）。
+				folderPath: 'saved_captures',
 				imageCount: 0,
 				thumbnails: [],
 				expertScore: 0,

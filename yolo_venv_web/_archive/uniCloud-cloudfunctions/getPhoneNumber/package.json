@@ -1,0 +1,8 @@
+{
+	"name": "getPhoneNumber",
+	"dependencies": {},
+	"extensions": {
+		"uni-cloud-jql": {},
+		"uni-cloud-verify": {} // 启用一键登录扩展，值为空对象即可
+	}
+}

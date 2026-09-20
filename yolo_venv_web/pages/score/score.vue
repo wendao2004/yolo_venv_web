@@ -83,7 +83,7 @@
           <view class="class-item">
             <view class="class-dot water"></view>
             <text class="class-name">积水</text>
-            <text class="class-count">{{ classCounts.water }}</text>
+            <text class="class-count">{{ classCounts.waterlogging }}</text>
           </view>
           <view class="class-item">
             <view class="class-dot pothole"></view>
@@ -152,7 +152,9 @@ export default {
       timer: null,
       currentIndex: 0,
       totalImages: 20,
-      testDir: 'mosquito_det/integrated/images/test',
+      // 原为 'mosquito_det/integrated/images/test'——来源项目的遗留路径，
+      // 服务端不存在，自动打分拿不到图。改用实际存在的截图目录。
+      testDir: 'saved_captures',
       targetCount: 20,
       currentImage: '',
       results: [],
@@ -192,12 +194,18 @@ export default {
       return avg > 0 ? Math.round(1000 / avg) : 0
     },
     classCounts() {
-      const counts = { water: 0, pothole: 0, manhole: 0, crack: 0 }
+      // ⚠ 这里的 key 必须与 classMap.js 的 CLASS_STATS_INIT / LOCAL_TO_DISPLAY 完全一致。
+      //   原先是 { water: 0, ... }，而 mapBackendKey('waterlogging') 返回的是
+      //   'waterlogging' —— 键名对不上，下面 counts[key] !== undefined 判 false，
+      //   于是**积水这一类的计数永远是 0**。
+      //   2026-09-19 修：'water' -> 'waterlogging'，并把兜底从 'water' 改成 null 判断
+      //   （兜底成某一类会让"未知类别"被静默算进积水，掩盖后端新增类别）。
+      const counts = { waterlogging: 0, pothole: 0, manhole: 0, crack: 0 }
       this.results.forEach(r => {
         if (r.detections) {
           r.detections.forEach(d => {
-            const key = mapBackendKey(d.class_name) || 'water'
-            if (counts[key] !== undefined) counts[key]++
+            const key = mapBackendKey(d.class_name)
+            if (key && counts[key] !== undefined) counts[key]++
           })
         }
       })

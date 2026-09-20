@@ -1,0 +1,8 @@
+{
+  "name": "api-main",
+  "main": "dist/index.js",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

@@ -53,6 +53,14 @@ const callCloud = async <T>(name : string, data ?: any) : Promise<CloudResult<T>
 };
 
 // ============== 前端网络层 = 对应后端3大云函数（拆分版）==============
+// ⚠️ 模板残留，勿动 appId
+// ---------------------
+// 这里整套 NetApi（Api-Auth / Api-Vheart-Chat / …）是从来源模板 Vheart 项目
+// 原样带来的，与本道路病害课题无关：真实 App 的登录走 `core/auth/AuthService.ts`，
+// 病害检测走 `api/websocket.js`，都不经过这里。页面里没有一处调用 `uniCloud.callFunction`。
+// 唯一要提醒的是下面 appId 的值：`Api-Auth` 拿它拼表名（`user_${appId}`，
+// 见 dist/index.js:23），所以**改这个字符串等于换一张用户表**，会让已有账号查不到。
+// 想清理这层模板代码，应该整块删掉并确认无引用，而不是把 appId 改个名字。
 export const NetApi = {
 	// ======================
 	// 1. 认证云函数 Api-Auth

@@ -1,0 +1,7 @@
+{
+  "name": "SmartHome_UserLogin",
+  "dependencies": {},
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}
