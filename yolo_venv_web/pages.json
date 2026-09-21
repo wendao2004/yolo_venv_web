@@ -29,7 +29,7 @@
 			"path": "pages/workorder/workorder",
 			"style": {
 				"navigationStyle": "custom",
-				"navigationBarTitleText": "工单管理"
+				"navigationBarTitleText": "病害记录"
 			}
 		},
 		{
@@ -77,7 +77,7 @@
 			},
 			{
 				"pagePath": "pages/workorder/workorder",
-				"text": "工单",
+				"text": "记录",
 				"iconPath": "/static/form.png",
 				"selectedIconPath": "/static/form_selected.png"
 			},

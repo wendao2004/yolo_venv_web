@@ -364,6 +364,25 @@
 						duration: 2000
 					})
 				})
+				// ⚠ 保存结果必须以后端回包为准。原来这里没有这个监听，点一下就直接弹
+				//「保存成功」——而服务端可能压根没写成（实测过：时间戳含冒号时
+				// cv2.imwrite 在 Windows 上直接失败，客户端却仍然报成功）。
+				// 真实的落盘结果只有 save_capture_result 知道。
+				this.socket.on('saveCaptureResult', (data) => {
+					if (data && data.success) {
+						uni.showToast({
+							title: '保存成功',
+							icon: 'success',
+							duration: 1000
+						})
+					} else {
+						uni.showToast({
+							title: '保存失败：后端未落盘',
+							icon: 'none',
+							duration: 2000
+						})
+					}
+				})
 				this.socket.connect().catch(() => {})
 			},
 			handleFrame(data) {
@@ -382,6 +401,10 @@
 				this.currentFrameData = {
 					image: this.currentImage,
 					detections: this.currentDetections,
+					// 后端 risk_level 是逐帧算好的权威值（server.py analyse_frame：
+					// 取该帧所有检出的最高风险，无风险时为 null）。保存记录时要
+					// 连同它一起落盘，所以必须在这里留住，不能像原来那样丢掉。
+					riskLevel: data.riskLevel,
 					timestamp: new Date().toLocaleTimeString()
 				}
 				for (const det of this.currentDetections) {
@@ -440,12 +463,35 @@
 					const key = mapBackendKey(className)
 					if (key && this.savedStats[key] !== undefined) this.savedStats[key]++
 				}
-				this.socket.saveCapture(this.currentFrameData.image, item.timestamp)
-				uni.showToast({
-					title: '保存成功',
-					icon: 'success',
-					duration: 1000
-				})
+				// 时间戳按原生客户端（index.html:2237）的既有约定生成：
+				// 2026-09-21T02-14-33 —— ISO 前 19 位，冒号/点换成短横线。
+				// 不能沿用 item.timestamp（toLocaleTimeString() → "12:07:25"）：
+				// 冒号在 Windows 上是非法文件名字符，server.py 拿它拼
+				// capture_<timestamp>.jpg 会让 cv2.imwrite 直接失败。
+				const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+				this.socket.saveCapture(
+					this.currentFrameData.image,
+					stamp,
+					this.buildCaptureMetadata()
+				)
+				// 成功/失败提示交给 saveCaptureResult 回包（见 initSocket），
+				// 这里不再抢答——否则写盘失败时照样弹「保存成功」。
+			},
+			// 组装 save_capture 的 metadata（A2）：字段名与「病害记录」页读的
+			// metadata.detection_list / metadata.risk_level 逐字对齐
+			// （workorder.vue 的 detectionListOf / riskLevelOf）。
+			// 两个值都直接照抄后端帧消息，前端不做推断、不补造。
+			buildCaptureMetadata() {
+				const dets = this.currentFrameData.detections || []
+				return {
+					risk_level: this.currentFrameData.riskLevel || 'normal',
+					detection_count: dets.length,
+					detection_list: dets.map(d => ({
+						class_name: d.class_name || d.class || '',
+						confidence: typeof d.confidence === 'number' ? d.confidence : 0,
+						risk_level: d.risk_level || 'normal'
+					}))
+				}
 			},
 			openModal(item) {
 				this.currentModalItem = item;
