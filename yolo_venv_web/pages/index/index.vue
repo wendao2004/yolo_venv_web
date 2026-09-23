@@ -152,7 +152,12 @@
 			<view class="records-section">
 				<view class="section-header">
 					<text class="section-title">保存记录</text>
+					<!-- A4：分数来自真实判定（判对率），下面一行给出可追溯的 已评/总张 -->
 					<text class="score-badge">{{ expertScore.toFixed(1) }} 分</text>
+				</view>
+				<view class="expert-row">
+					<text class="expert-summary">{{ expertSummary }}</text>
+					<button class="btn-expert" @click="startExpertScore">开始专家打分</button>
 				</view>
 				<scroll-view scroll-x class="records-scroll">
 					<view class="records-list">
@@ -185,8 +190,21 @@
 
 		<view class="modal-overlay" :class="{ show: showModal }" @click="closeModal">
 			<view class="modal-content" @click.stop>
-				<image v-if="currentModalItem" :src="'data:image/jpeg;base64,' + currentModalItem.image"
+				<!-- A4：专家打分模态显示的是**后端回来的 expert_image_data.image**，
+				     而不是本地缩略图；框走 drawExpertBoxes()（xywh→左上角）。 -->
+				<view v-if="expertImage" class="expert-stage">
+					<image :src="'data:image/jpeg;base64,' + expertImage.image" mode="aspectFit" class="modal-image">
+					</image>
+					<view v-for="(box, bi) in drawExpertBoxes()" :key="bi" class="expert-box"
+						:style="{ left: box.left + 'px', top: box.top + 'px', width: box.width + 'px', height: box.height + 'px' }">
+						<text class="expert-box-label">{{ box.label }}</text>
+					</view>
+				</view>
+				<image v-else-if="currentModalItem" :src="'data:image/jpeg;base64,' + currentModalItem.image"
 					mode="aspectFit" class="modal-image"></image>
+				<view v-if="expertImage" class="expert-meta">
+					<text>{{ expertImage.image_name }} · 第 {{ expertIndex }} / {{ expertTotal }} 张</text>
+				</view>
 				<view class="modal-actions">
 					<button class="modal-btn correct" @click="markThumbnail('correct')">✓ 正确</button>
 					<button class="modal-btn incorrect" @click="markThumbnail('incorrect')">✗ 错误</button>
@@ -234,7 +252,15 @@
 				folderPath: 'saved_captures',
 				imageCount: 0,
 				thumbnails: [],
-				expertScore: 0,
+				// A4：专家打分的"分数"不再是本地自增的假值。
+				// 改由**真实判定记录**算出来：每评一张记一条，分数 = 判对率(%)。
+				// expertJudged 是逐张判定列表，长度即"已评张数"。
+				expertJudged: [],
+				// 当前从后端取到的专家打分图（expert_image_data），不是缩略图。
+				expertImage: null,
+				// 后端专家打分游标：current_index(从 1 起) / total_count
+				expertIndex: 0,
+				expertTotal: 0,
 				currentModalItem: null,
 				showModal: false,
 				riskLevel: '',
@@ -271,6 +297,22 @@
 			cameraInfoText() {
 				if (!this.cameraInfo) return ''
 				return `${this.cameraInfo.width}x${this.cameraInfo.height} @${this.cameraInfo.fps}fps`
+			},
+			// A4：分数由**真实判定**算，不再本地自增。
+			// 口径 = 判对率(%)，没有判定时显示 0，且必须是"已评/总张"可追溯。
+			expertScore() {
+				const judged = this.expertJudged.length
+				if (judged === 0) return 0
+				const correct = this.expertJudged.filter(j => j.status === 'correct').length
+				return (correct / judged) * 100
+			},
+			expertSummary() {
+				const judged = this.expertJudged.length
+				if (judged === 0) return '尚未评分'
+				const correct = this.expertJudged.filter(j => j.status === 'correct').length
+				// 总张数优先用后端给的 total_count，没有时退回已评张数
+				const total = this.expertTotal || judged
+				return `${correct}/${judged} 正确 · 共 ${total} 张`
 			},
 			detectionTags() {
 				const classCounts = {}
@@ -363,6 +405,20 @@
 						icon: 'none',
 						duration: 2000
 					})
+				})
+				// A4：专家打分的真数据源。后端 process_expert_score 逐张回图，
+				// detections[] 是 **xywh 形状**（x,y 是中心点），与帧消息的 xyxy 不同，
+				// 所以画框必须走 drawExpertBoxes()，不能复用帧那套。
+				this.socket.on('expertImageData', (data) => {
+					this.expertImage = data
+					this.expertIndex = data.current_index || 0
+					this.expertTotal = data.total_count || 0
+					// 后端走完最后一张时 current_index 不再增加（见 websocket.js:327），
+					// 用它来判断"已到末尾"，而不是靠本地计数猜。
+					if (this.expertTotal > 0 && this.expertIndex > 0) {
+						// 打开/刷新审图弹窗，展示后端回来的图与框
+						this.showModal = true
+					}
 				})
 				// ⚠ 保存结果必须以后端回包为准。原来这里没有这个监听，点一下就直接弹
 				//「保存成功」——而服务端可能压根没写成（实测过：时间戳含冒号时
@@ -502,13 +558,58 @@
 				this.currentModalItem = null
 			},
 			markThumbnail(status) {
-				if (!this.currentModalItem) return
-				const idx = this.thumbnails.findIndex(t => t.id === this.currentModalItem.id)
-				if (idx >= 0) {
-					this.thumbnails[idx].status = status
-					if (status === 'correct') this.expertScore += 1.5
+				// A4：这里原来只做 `expertScore += 1.5`——纯本地自增，与后端毫无关系。
+				// 现在改成**真接线**：
+				//   ① 记下这一张的真实判定（correct / incorrect）；
+				//   ② 向后端要下一张（next_expert_image → expert_image_data）；
+				//   ③ 分数由 expertJudged 算，不再自增。
+				const target = this.expertImage || this.currentModalItem
+				if (!target) return
+				const name = (this.expertImage && this.expertImage.image_name) ||
+					(this.currentModalItem && this.currentModalItem.id) || ''
+				this.expertJudged.push({
+					name,
+					// 后端逐张回的真实检出数（expert_image_data.detections），帧那套是 xyxy 不能混用
+					detections: this.expertImage ? (this.expertImage.detections || []) : [],
+					status
+				})
+				// 向后端要下一张。回包(expertImageData)会替换 expertImage 并保持弹窗打开，
+				// 于是画面**真的换成下一张图**；这里不关弹窗，避免关了又开的闪烁。
+				if (this.socket) this.socket.nextExpertImage()
+			},
+			// A4：开始专家打分。服务端回第一条 expert_image_data。
+			// directory 用 'saved_captures'——server.py 的 SAVED_IMAGES_DIR，
+			// 也是本项目唯一真实存在、有图的目录。
+			startExpertScore() {
+				if (!this.socket || !this.isConnected) {
+					uni.showToast({ title: '请先连接', icon: 'none', duration: 2000 })
+					return
 				}
-				this.closeModal()
+				this.expertJudged = []
+				this.expertImage = null
+				this.expertIndex = 0
+				this.expertTotal = 0
+				if (this.socket) this.socket.startExpertScore(this.folderPath || 'saved_captures')
+			},
+			// A4：画专家打分的框。**xywh（中心点）→ 左上角**必须减去 width/2、height/2，
+			// 这是与帧消息 xyxy 最大的区别（plan/01-后端协议参考.md §3.3）。
+			drawExpertBoxes() {
+				if (!this.expertImage) return []
+				const dets = this.expertImage.detections || []
+				return dets.map(d => {
+					const w = Number(d.width) || 0
+					const h = Number(d.height) || 0
+					// server.py:664-672 —— x,y 是**中心点**
+					const left = (Number(d.x) || 0) - w / 2
+					const top = (Number(d.y) || 0) - h / 2
+					return {
+						left,
+						top,
+						width: w,
+						height: h,
+						label: `${d.class_name || ''} ${(Number(d.confidence) || 0).toFixed(2)}`
+					}
+				})
 			},
 			resetStats() {
 				this.stats = {
@@ -517,7 +618,10 @@
 				this.savedStats = {
 					...CLASS_STATS_INIT
 				}
-				this.expertScore = 0
+				this.expertJudged = []
+				this.expertImage = null
+				this.expertIndex = 0
+				this.expertTotal = 0
 				this.frameIndex = 0
 				this.fps = 0
 				this.currentDetections = []
@@ -554,6 +658,59 @@
 </script>
 
 <style scoped>
+	/* A4：专家打分相关样式 */
+	.expert-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 16px 10px;
+	}
+
+	.expert-summary {
+		font-size: 12px;
+		color: var(--text-secondary, #9ca3af);
+	}
+
+	.btn-expert {
+		padding: 4px 12px;
+		font-size: 12px;
+		line-height: 1.6;
+		color: #fff;
+		background: #4f46e5;
+		border: none;
+		border-radius: 6px;
+	}
+
+	/* 专家打分的图画布：框用绝对定位叠在图上 */
+	.expert-stage {
+		position: relative;
+		width: 100%;
+	}
+
+	.expert-box {
+		position: absolute;
+		border: 2px solid #ef4444;
+		border-radius: 2px;
+		box-sizing: border-box;
+	}
+
+	.expert-box-label {
+		position: absolute;
+		top: -16px;
+		left: -2px;
+		font-size: 10px;
+		color: #fff;
+		background: #ef4444;
+		padding: 0 4px;
+		white-space: nowrap;
+	}
+
+	.expert-meta {
+		padding: 6px 4px;
+		font-size: 12px;
+		color: var(--text-secondary, #9ca3af);
+	}
+
 	.page {
 		display: flex;
 		flex-direction: column;
