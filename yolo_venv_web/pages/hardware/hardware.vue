@@ -57,6 +57,34 @@
 				</view>
 			</view>
 
+			<!-- 硬件控制：发 s3_command，经 server.py 广播 → s3_bridge.py → ESP 执行。 -->
+			<view class="control-section">
+				<text class="section-title">硬件控制</text>
+
+				<view class="control-group">
+					<view class="control-row">
+						<text class="control-label">音量</text>
+						<text class="control-value">{{ volumeDraft }}%</text>
+					</view>
+					<slider :value="volumeDraft" :min="0" :max="100" :step="5" activeColor="#4f46e5"
+						backgroundColor="transparent" block-size="14" @change="onVolumeChange" />
+					<view class="btn-row">
+						<button class="btn-secondary" @click="toggleMute">
+							{{ status.muted ? '取消静音' : '静音' }}
+						</button>
+						<button class="btn-secondary danger" @click="rebootEsp">重启 ESP</button>
+					</view>
+				</view>
+
+				<view class="control-group">
+					<text class="control-label">试播告警语音（在 ESP 喇叭上放一条，用来验链路）</text>
+					<view class="voice-grid">
+						<button v-for="a in voiceAssets" :key="a.value" class="voice-btn"
+							@click="playVoice(a.value)">{{ a.label }}</button>
+					</view>
+				</view>
+			</view>
+
 			<view class="log-section">
 				<view class="section-header">
 					<text class="section-title">硬件日志</text>
@@ -106,6 +134,35 @@
 				lastDropFrames: null,
 				hostInput: '',
 				currentUrl: '',
+				// 音量滑块的本地草稿值：由 s3_status.volume 同步（见 handleS3Status）。
+				volumeDraft: 70,
+				// 试播素材白名单 —— 必须与固件 net_task.cpp 的 kAssets、
+				// 以及 ESP LittleFS 里 data/*.pcm 的素材名三方一致。
+				voiceAssets: [{
+						label: '高风险',
+						value: 'high_risk'
+					},
+					{
+						label: '积水',
+						value: 'water_1'
+					},
+					{
+						label: '坑洼',
+						value: 'pothole_1'
+					},
+					{
+						label: '井盖',
+						value: 'manhole_1'
+					},
+					{
+						label: '裂纹',
+						value: 'crack_1'
+					},
+					{
+						label: '链路恢复',
+						value: 'link_ok'
+					}
+				],
 				logs: [],
 				isDarkTheme: getTheme() === 'dark',
 				statusBarHeight: 0
@@ -361,6 +418,9 @@
 				this.status = data
 				this.lastStatusAt = Date.now()
 				this.hardwareOnline = true
+				// 用 ESP 报回来的真实音量回填滑块（指令生效后 ESP 会立刻补发一条
+				// s3_status，见固件 net_task.cpp 的 onCommand）。
+				if (this.isNumber(data.volume)) this.volumeDraft = data.volume
 				if (!wasOnline) this.addLog('info', '硬件已上线（收到 s3_status）')
 
 				// 只增不减的计数出现变化时才记日志，避免每 2s 刷屏。
@@ -374,6 +434,49 @@
 				}
 				if (this.isNumber(data.reconnects)) this.lastReconnects = data.reconnects
 				if (this.isNumber(data.drop_frames)) this.lastDropFrames = data.drop_frames
+			},
+			// ---- 硬件控制：全部走 s3_command（server.py 广播 → bridge → ESP）----
+			sendCmd(cmd, value) {
+				if (!this.socket || !this.isConnected) {
+					uni.showToast({
+						title: '请先连接后端',
+						icon: 'none',
+						duration: 1500
+					})
+					return false
+				}
+				if (!this.hardwareOnline) {
+					// 后端在、但 ESP 没上报心跳：指令会发出去却没人执行，先提醒一句。
+					uni.showToast({
+						title: '硬件不在线，指令可能无效',
+						icon: 'none',
+						duration: 2000
+					})
+				}
+				this.socket.sendS3Command(cmd, value)
+				return true
+			},
+			onVolumeChange(e) {
+				const v = Number(e.detail.value)
+				this.volumeDraft = v
+				if (this.sendCmd('volume', v)) this.addLog('command', `设置音量 ${v}%`)
+			},
+			toggleMute() {
+				const next = !this.status.muted
+				if (this.sendCmd('mute', next)) this.addLog('command', next ? '静音' : '取消静音')
+			},
+			playVoice(asset) {
+				if (this.sendCmd('play', asset)) this.addLog('command', `试播语音 ${asset}`)
+			},
+			rebootEsp() {
+				uni.showModal({
+					title: '重启 ESP32-S3',
+					content: '设备会立即重启并重新连接（约 5~10 秒）。确定吗？',
+					success: (res) => {
+						if (!res.confirm) return
+						if (this.sendCmd('reboot')) this.addLog('command', '重启 ESP')
+					}
+				})
 			},
 			addLog(type, message) {
 				const now = new Date()
@@ -583,6 +686,47 @@
 		display: block;
 	}
 
+	.control-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 6px;
+	}
+
+	.control-row .control-label {
+		margin-bottom: 0;
+	}
+
+	.control-value {
+		font-family: 'SF Mono', monospace;
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--accent);
+	}
+
+	.voice-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+	}
+
+	.voice-btn {
+		padding: 12px 6px;
+		background: var(--bg-input);
+		border-radius: var(--radius-sm);
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-secondary);
+		border: 1px solid var(--border-color);
+		transition: all 0.2s ease;
+	}
+
+	.voice-btn:active {
+		transform: scale(0.95);
+		background: var(--accent-light);
+		color: #fff;
+	}
+
 	.lcd-input {
 		width: 100%;
 		padding: 13px 14px;
@@ -634,6 +778,12 @@
 
 	.btn-secondary:active {
 		background: var(--bg-hover);
+	}
+
+	.btn-secondary.danger {
+		color: var(--danger);
+		border-color: var(--danger);
+		background: var(--danger-light);
 	}
 
 	.btn-row .btn-secondary {

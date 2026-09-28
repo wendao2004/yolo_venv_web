@@ -185,6 +185,11 @@ class DetectSocket {
 			// A3：ESP32-S3 上报的状态。字段集尚未最终定稿（I-1 待 S3 上板，
 			// 见 plan/01-后端协议参考.md §5），所以原样透传，页面按可选字段读。
 			this.emit('s3Status', data)
+		} else if (data.type === 's3_command') {
+			// 自己下发的硬件指令会被 server.py 广播回来（它广播给所有 8766 客户端）。
+			// 必须显式接住：否则会掉进下面的 else，被当成一帧把画面打黑，
+			// 或者至少打一条"未知消息类型"的警告。
+			this.emit('s3Command', data)
 		} else if (data.type === 'save_capture_result') {
 			// ⚠ 必须显式分支，不能让下面 else 兜底
 			// -----------------------------------
@@ -308,6 +313,26 @@ class DetectSocket {
 		this.send({
 			type: 'list_saved_captures'
 		})
+	}
+
+	/**
+	 * 下发一条硬件控制指令（s3_command）。
+	 *
+	 * 链路：本端 --ws 8766--> server.py --广播--> s3_bridge.py --ws 8767--> ESP32-S3
+	 *   · server.py 的 handle_client 有 `s3_command` 分支，收到就 broadcast；
+	 *   · s3_bridge.py 的 on_frame 认出 s3_command 并转发给 ESP；
+	 *   · 固件 ws_client.cpp 解析后交给 net_task 的 onCommand 执行。
+	 *
+	 * @param {string} cmd   'volume' | 'mute' | 'play' | 'reboot'
+	 * @param {*}      value volume: 0..100；mute: boolean；play: 素材名；reboot: 省略
+	 */
+	sendS3Command(cmd, value) {
+		const msg = {
+			type: 's3_command',
+			cmd
+		}
+		if (value !== undefined) msg.value = value
+		this.send(msg)
 	}
 
 	startAutoScore(directory, count) {
