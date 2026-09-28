@@ -38,8 +38,11 @@ class DetectSocket {
 					wsHost = m
 				}
 			}
+			// ⚠ 原来写的是 `if (savedPort && !wsPort)`，而 wsPort 上面已被初始化成
+			// '8766'（恒为真）→ 这个条件永远不成立 → **用户在「硬件」页保存的端口
+			// 从来没生效过**，永远退回默认 8766。改成只要存了端口就用它。
 			const savedPort = uni.getStorageSync('ws_port')
-			if (savedPort && !wsPort) wsPort = String(savedPort)
+			if (savedPort) wsPort = String(savedPort)
 		} catch (e) { /* 存储不可用时忽略 */ }
 
 		// ---- 2) H5：从 URL 推断 ----

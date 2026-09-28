@@ -13,8 +13,8 @@
 					<view class="status-dot"></view>
 					<text>{{ isConnected ? '在线' : '离线' }}</text>
 				</view>
-				<view class="hardware-status" :class="{ active: hardwareConnected }">
-					{{ hardwareConnected ? '硬件在线' : '硬件离线' }}
+				<view class="hardware-status" :class="{ active: hardwareOnline }">
+					{{ hardwareOnline ? '硬件在线' : '硬件离线' }}
 				</view>
 				<button class="action-btn" @click="toggleTheme">
 					<text>{{ isDarkTheme ? '☀️' : '🌙' }}</text>
@@ -26,78 +26,34 @@
 		</view>
 
 		<view class="main-content">
-			<view class="overview-section">
-				<text class="section-title">设备状态</text>
-				<view class="overview-grid">
-					<view class="device-card">
-						<view class="device-icon">📺</view>
-						<view class="device-info">
-							<text class="device-name">LCD1602 显示屏</text>
-							<text class="device-status" :class="hardwareStatus.lcd_status ? 'active' : 'inactive'">
-								{{ hardwareStatus.lcd_status ? '运行中' : '未连接' }}
-							</text>
-						</view>
-						<text class="device-value">{{ hardwareStatus.lcd_text || '---' }}</text>
+			<!-- 服务器地址：App 端没有 location，必须能手动指定 PC 的局域网 IP（见对接文档 §5.3）。 -->
+			<view class="control-section">
+				<text class="section-title">服务器地址</text>
+				<view class="control-group">
+					<text class="control-label">PC 局域网地址（IP 或 IP:端口）</text>
+					<input class="lcd-input" :value="hostInput" @input="onHostInput" placeholder="例如 192.168.137.1:8766" />
+					<view class="btn-row">
+						<button class="btn-primary" @click="saveHost">保存并重连</button>
+						<button class="btn-secondary" @click="resetHost">恢复默认</button>
 					</view>
-					<view class="device-card">
-						<view class="device-icon">🚨</view>
-						<view class="device-info">
-							<text class="device-name">旋转警示灯</text>
-							<text class="device-status" :class="hardwareStatus.warning_light ? 'active' : 'inactive'">
-								{{ hardwareStatus.warning_light ? '闪烁中' : '关闭' }}
-							</text>
-						</view>
-						<text class="device-value">{{ getLightColor(hardwareStatus.light_color) }}</text>
-					</view>
-					<view class="device-card">
-						<view class="device-icon">🔔</view>
-						<view class="device-info">
-							<text class="device-name">蜂鸣器</text>
-							<text class="device-status" :class="hardwareStatus.buzzer ? 'active' : 'inactive'">
-								{{ hardwareStatus.buzzer ? '鸣叫中' : '静音' }}
-							</text>
-						</view>
-						<text class="device-value">{{ hardwareStatus.buzzer_freq || '---' }}</text>
-					</view>
+					<text class="source-info">当前连接：{{ currentUrl }}</text>
 				</view>
 			</view>
 
-			<view class="control-section">
-				<text class="section-title">手动控制</text>
-
-				<view class="control-group">
-					<text class="control-label">风险等级控制</text>
-					<view class="btn-grid-4">
-						<button class="control-btn high" @click="sendRiskCommand('high')">高风险</button>
-						<button class="control-btn medium" @click="sendRiskCommand('medium')">中风险</button>
-						<button class="control-btn low" @click="sendRiskCommand('low')">低风险</button>
-						<button class="control-btn clear" @click="sendRiskCommand('none')">清除</button>
-					</view>
+			<view class="overview-section">
+				<text class="section-title">设备状态</text>
+				<view v-if="!hardwareOnline" class="hint-box">
+					<text>等待 ESP32-S3 上报 s3_status…</text>
+					<text class="hint-sub">硬件每 2 秒上报一次；超过 6 秒未收到即判定离线。</text>
 				</view>
-
-				<view class="control-group">
-					<text class="control-label">警示灯控制</text>
-					<view class="btn-grid-4">
-						<button class="control-btn red" @click="sendLightCommand('red')">红色</button>
-						<button class="control-btn yellow" @click="sendLightCommand('yellow')">黄色</button>
-						<button class="control-btn blue" @click="sendLightCommand('blue')">蓝色</button>
-						<button class="control-btn off" @click="sendLightCommand('off')">关闭</button>
+				<view class="metric-grid">
+					<view v-for="item in metrics" :key="item.label" class="metric-card">
+						<text class="metric-icon">{{ item.icon }}</text>
+						<view class="metric-info">
+							<text class="metric-label">{{ item.label }}</text>
+							<text class="metric-value" :class="item.cls">{{ item.value }}</text>
+						</view>
 					</view>
-				</view>
-
-				<view class="control-group">
-					<text class="control-label">蜂鸣器控制</text>
-					<view class="btn-grid-3">
-						<button class="control-btn danger" @click="sendBuzzerCommand('on')">开启</button>
-						<button class="control-btn gray" @click="sendBuzzerCommand('off')">关闭</button>
-						<button class="control-btn purple" @click="sendBuzzerCommand('alert')">警报模式</button>
-					</view>
-				</view>
-
-				<view class="control-group">
-					<text class="control-label">LCD显示文本</text>
-					<input class="lcd-input" :value="lcdText" @input="onLcdInput" placeholder="输入显示文本" />
-					<button class="btn-primary w-full" @click="sendLcdCommand">发送到显示屏</button>
 				</view>
 			</view>
 
@@ -126,40 +82,179 @@
 		getTheme
 	} from '@/utils/theme.js'
 
+	// 硬件心跳判定窗口：s3_status 每 2s 一条，超过该时长未收到即视为离线。
+	const HARDWARE_TIMEOUT_MS = 6000
+	// 服务器地址的本地存储键，必须与 api/websocket.js 的 getUrl() 读取的键一致。
+	const HOST_KEY = 'ws_host'
+	const PORT_KEY = 'ws_port'
+
 	export default {
 		name: 'HardwareStatus',
 		data() {
 			return {
 				socket: null,
 				isConnected: false,
-				hardwareConnected: false,
-				hardwareStatus: {
-					lcd_status: false,
-					lcd_text: '',
-					warning_light: false,
-					light_color: '',
-					buzzer: false,
-					buzzer_freq: ''
-				},
-				lcdText: '',
+				// 硬件（ESP32-S3）是否在线：以最近一条 s3_status 的新鲜度为准，
+				// 因为 s3_status 报文里没有 connected 字段。
+				hardwareOnline: false,
+				lastStatusAt: 0,
+				status: {},
+				now: Date.now(),
+				ticker: null,
+				// 用于检测"重连次数 / 丢帧数"这类只增不减的计数变化
+				lastReconnects: null,
+				lastDropFrames: null,
+				hostInput: '',
+				currentUrl: '',
 				logs: [],
 				isDarkTheme: getTheme() === 'dark',
 				statusBarHeight: 0
 			}
 		},
+		computed: {
+			metrics() {
+				const s = this.status
+				return [{
+						label: '运行时长',
+						icon: '⏱️',
+						value: this.formatUptime(s.uptime_s)
+					},
+					{
+						label: 'WiFi 信号',
+						icon: '📶',
+						value: this.formatRssi(s.wifi_rssi),
+						cls: this.rssiClass(s.wifi_rssi)
+					},
+					{
+						label: '可用内存',
+						icon: '🧠',
+						value: this.formatKb(s.free_heap_kb)
+					},
+					{
+						label: 'PSRAM',
+						icon: '💾',
+						value: this.formatKb(s.free_psram_kb)
+					},
+					{
+						label: '音量',
+						icon: '🔊',
+						value: this.isNumber(s.volume) ? s.volume + '%' : '—'
+					},
+					{
+						label: '静音',
+						icon: '🔇',
+						value: typeof s.muted === 'boolean' ? (s.muted ? '是' : '否') : '—'
+					},
+					{
+						label: '正在播放',
+						icon: '🎵',
+						value: s.playing ? String(s.playing) : '空闲'
+					},
+					{
+						label: '帧龄',
+						icon: '🖼️',
+						value: this.isNumber(s.frame_age_ms) ? s.frame_age_ms + ' ms' : '—',
+						cls: this.frameAgeClass(s.frame_age_ms)
+					},
+					{
+						label: '实测帧率',
+						icon: '📈',
+						value: this.isNumber(s.fps) ? Number(s.fps).toFixed(1) : '—'
+					},
+					{
+						label: '接收帧数',
+						icon: '📥',
+						value: this.isNumber(s.rx_frames) ? String(s.rx_frames) : '—'
+					},
+					{
+						label: '丢帧数',
+						icon: '⚠️',
+						value: this.isNumber(s.drop_frames) ? String(s.drop_frames) : '—',
+						cls: this.isNumber(s.drop_frames) && s.drop_frames > 0 ? 'value-warn' : ''
+					},
+					{
+						label: '重连次数',
+						icon: '🔁',
+						value: this.isNumber(s.reconnects) ? String(s.reconnects) : '—',
+						cls: this.isNumber(s.reconnects) && s.reconnects > 0 ? 'value-warn' : ''
+					}
+				]
+			}
+		},
 		onLoad() {
 			const sysInfo = uni.getSystemInfoSync()
 			this.statusBarHeight = sysInfo.statusBarHeight || 0
+			this.loadHostInput()
 			this.initSocket()
-		},
-		onUnload() {
-			if (this.socket) this.socket.close()
+			this.startTicker()
 		},
 		onShow() {
 			if (!this.socket) this.initSocket()
 			this.isDarkTheme = getApp().globalData.theme === 'dark'
+			this.startTicker()
+		},
+		onHide() {
+			this.stopTicker()
+		},
+		onUnload() {
+			this.stopTicker()
+			if (this.socket) this.socket.close()
 		},
 		methods: {
+			isNumber(v) {
+				return typeof v === 'number' && isFinite(v)
+			},
+			formatUptime(sec) {
+				if (!this.isNumber(sec)) return '—'
+				const s = Math.max(0, Math.floor(sec))
+				const d = Math.floor(s / 86400)
+				const h = Math.floor((s % 86400) / 3600)
+				const m = Math.floor((s % 3600) / 60)
+				const ss = s % 60
+				if (d > 0) return `${d}天${h}时`
+				if (h > 0) return `${h}时${m}分`
+				if (m > 0) return `${m}分${ss}秒`
+				return `${ss}秒`
+			},
+			formatKb(kb) {
+				if (!this.isNumber(kb)) return '—'
+				if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB'
+				return kb + ' KB'
+			},
+			formatRssi(rssi) {
+				if (!this.isNumber(rssi)) return '—'
+				return `${rssi} dBm`
+			},
+			rssiClass(rssi) {
+				if (!this.isNumber(rssi)) return ''
+				if (rssi >= -60) return 'value-good'
+				if (rssi >= -75) return 'value-warn'
+				return 'value-bad'
+			},
+			frameAgeClass(age) {
+				if (!this.isNumber(age)) return ''
+				if (age <= 200) return 'value-good'
+				if (age <= 1000) return 'value-warn'
+				return 'value-bad'
+			},
+			startTicker() {
+				this.stopTicker()
+				this.ticker = setInterval(() => {
+					this.now = Date.now()
+					const online = this.lastStatusAt > 0 &&
+						(this.now - this.lastStatusAt) < HARDWARE_TIMEOUT_MS
+					if (this.hardwareOnline && !online) {
+						this.addLog('error', '硬件心跳超时，判定为离线')
+					}
+					this.hardwareOnline = online
+				}, 1000)
+			},
+			stopTicker() {
+				if (this.ticker) {
+					clearInterval(this.ticker)
+					this.ticker = null
+				}
+			},
 			toggleTheme() {
 				const app = getApp()
 				const newTheme = app.toggleTheme()
@@ -170,10 +265,71 @@
 					duration: 1500
 				})
 			},
+			// ---- 服务器地址（写进 storage，websocket.js 的 getUrl() 会优先读取）----
+			loadHostInput() {
+				let host = ''
+				let port = ''
+				try {
+					host = uni.getStorageSync(HOST_KEY) || ''
+					port = uni.getStorageSync(PORT_KEY) || ''
+				} catch (e) { /* 存储不可用时忽略 */ }
+				this.hostInput = host ? (port && String(host).indexOf(':') < 0 ? `${host}:${port}` : String(host)) : ''
+				this.refreshCurrentUrl()
+			},
+			onHostInput(e) {
+				this.hostInput = e.detail.value || ''
+			},
+			refreshCurrentUrl() {
+				// 用一次临时实例解析出实际会连接的地址，避免在这里重复 getUrl() 的逻辑。
+				try {
+					this.currentUrl = new DetectSocket().getUrl()
+				} catch (e) {
+					this.currentUrl = '—'
+				}
+			},
+			saveHost() {
+				const raw = (this.hostInput || '').trim()
+				try {
+					if (!raw) {
+						uni.removeStorageSync(HOST_KEY)
+						uni.removeStorageSync(PORT_KEY)
+					} else {
+						// 允许 'ip' 或 'ip:port' 两种写法；websocket.js 也会再解析一次。
+						const m = raw.replace(/^wss?:\/\//, '')
+						const idx = m.lastIndexOf(':')
+						if (idx > 0 && /^\d+$/.test(m.slice(idx + 1))) {
+							uni.setStorageSync(HOST_KEY, m.slice(0, idx))
+							uni.setStorageSync(PORT_KEY, m.slice(idx + 1))
+						} else {
+							uni.setStorageSync(HOST_KEY, m)
+							uni.removeStorageSync(PORT_KEY)
+						}
+					}
+				} catch (e) {
+					uni.showToast({ title: '保存失败', icon: 'none', duration: 1500 })
+					return
+				}
+				this.refreshCurrentUrl()
+				this.addLog('command', `服务器地址已更新为 ${this.currentUrl}`)
+				uni.showToast({ title: '已保存，正在重连', icon: 'success', duration: 1500 })
+				this.reconnect()
+			},
+			resetHost() {
+				try {
+					uni.removeStorageSync(HOST_KEY)
+					uni.removeStorageSync(PORT_KEY)
+				} catch (e) { /* 忽略 */ }
+				this.hostInput = ''
+				this.refreshCurrentUrl()
+				uni.showToast({ title: '已恢复默认地址', icon: 'none', duration: 1500 })
+				this.reconnect()
+			},
 			initSocket() {
 				this.socket = new DetectSocket()
 				this.socket.on('connected', () => {
-					this.isConnected = true;
+					this.isConnected = true
+					this.refreshCurrentUrl()
+					this.addLog('info', `已连接后端 ${this.currentUrl}`)
 					uni.showToast({
 						title: '已连接',
 						icon: 'success',
@@ -181,8 +337,8 @@
 					})
 				})
 				this.socket.on('disconnected', () => {
-					this.isConnected = false;
-					this.hardwareConnected = false
+					this.isConnected = false
+					this.hardwareOnline = false
 				})
 				this.socket.on('error', () => {
 					uni.showToast({
@@ -191,20 +347,33 @@
 						duration: 2000
 					})
 				})
-				this.socket.on('hardwareStatus', (data) => {
-					this.handleHardwareStatus(data)
+				// s3_status 由 server.py 透传（对接文档 §5.1）；字段见 §4.2。
+				// ⚠ 事件名必须是 's3Status'（api/websocket.js 的 emit 名），
+				//   原实现监听的是 'hardwareStatus'，该事件从未被 emit → 页面永远不动。
+				this.socket.on('s3Status', (data) => {
+					this.handleS3Status(data)
 				})
 				this.socket.connect().catch(() => {})
 			},
-			handleHardwareStatus(data) {
-				this.hardwareConnected = data.connected || false
-				this.hardwareStatus = {
-					...this.hardwareStatus,
-					...data
+			handleS3Status(data) {
+				if (!data || typeof data !== 'object') return
+				const wasOnline = this.hardwareOnline
+				this.status = data
+				this.lastStatusAt = Date.now()
+				this.hardwareOnline = true
+				if (!wasOnline) this.addLog('info', '硬件已上线（收到 s3_status）')
+
+				// 只增不减的计数出现变化时才记日志，避免每 2s 刷屏。
+				if (this.isNumber(data.reconnects) && this.lastReconnects !== null &&
+					data.reconnects > this.lastReconnects) {
+					this.addLog('error', `硬件重连次数增加：${this.lastReconnects} → ${data.reconnects}`)
 				}
-				this.addLog('info',
-					`硬件状态更新: LCD=${data.lcd_status ? 'ON' : 'OFF'}, Light=${data.warning_light ? 'ON' : 'OFF'}, Buzzer=${data.buzzer ? 'ON' : 'OFF'}`
-					)
+				if (this.isNumber(data.drop_frames) && this.lastDropFrames !== null &&
+					data.drop_frames > this.lastDropFrames) {
+					this.addLog('error', `硬件丢帧增加：${this.lastDropFrames} → ${data.drop_frames}`)
+				}
+				if (this.isNumber(data.reconnects)) this.lastReconnects = data.reconnects
+				if (this.isNumber(data.drop_frames)) this.lastDropFrames = data.drop_frames
 			},
 			addLog(type, message) {
 				const now = new Date()
@@ -217,86 +386,6 @@
 				})
 				if (this.logs.length > 50) this.logs = this.logs.slice(0, 50)
 			},
-			sendRiskCommand(riskLevel) {
-				if (!this.socket) return
-				const commands = {
-					high: 'RISK_HIGH',
-					medium: 'RISK_MEDIUM',
-					low: 'RISK_LOW',
-					none: 'RISK_NONE'
-				}
-				this.socket.send({
-					type: 'hardware_command',
-					command: commands[riskLevel]
-				})
-				this.addLog('command', `发送风险等级指令: ${riskLevel}`)
-				uni.showToast({
-					title: '指令已发送',
-					icon: 'success',
-					duration: 1500
-				})
-			},
-			sendLightCommand(color) {
-				if (!this.socket) return
-				const commands = {
-					red: 'LIGHT_RED',
-					yellow: 'LIGHT_YELLOW',
-					blue: 'LIGHT_BLUE',
-					off: 'LIGHT_OFF'
-				}
-				this.socket.send({
-					type: 'hardware_command',
-					command: commands[color]
-				})
-				this.addLog('command', `发送灯光指令: ${color}`)
-				uni.showToast({
-					title: '指令已发送',
-					icon: 'success',
-					duration: 1500
-				})
-			},
-			sendBuzzerCommand(action) {
-				if (!this.socket) return
-				const commands = {
-					on: 'BUZZER_ON',
-					off: 'BUZZER_OFF',
-					alert: 'BUZZER_ALERT'
-				}
-				this.socket.send({
-					type: 'hardware_command',
-					command: commands[action]
-				})
-				this.addLog('command', `发送蜂鸣器指令: ${action}`)
-				uni.showToast({
-					title: '指令已发送',
-					icon: 'success',
-					duration: 1500
-				})
-			},
-			sendLcdCommand() {
-				if (!this.socket || !this.lcdText.trim()) {
-					uni.showToast({
-						title: '请输入文本',
-						icon: 'none',
-						duration: 1500
-					});
-					return
-				}
-				this.socket.send({
-					type: 'hardware_command',
-					command: `LCD:${this.lcdText}`
-				})
-				this.addLog('command', `发送LCD文本: ${this.lcdText}`)
-				uni.showToast({
-					title: '指令已发送',
-					icon: 'success',
-					duration: 1500
-				})
-				this.lcdText = ''
-			},
-			onLcdInput(e) {
-				this.lcdText = e.detail.value || ''
-			},
 			clearLogs() {
 				this.logs = [];
 				uni.showToast({
@@ -305,18 +394,17 @@
 					duration: 1500
 				})
 			},
-			getLightColor(color) {
-				const colors = {
-					'red': '🔴 红色',
-					'yellow': '🟡 黄色',
-					'blue': '🔵 蓝色',
-					'': '---'
-				};
-				return colors[color] || color
-			},
 			reconnect() {
-				if (this.socket) this.socket.close();
+				this.stopTicker()
+				if (this.socket) this.socket.close()
+				this.socket = null
+				this.isConnected = false
+				this.hardwareOnline = false
+				this.lastStatusAt = 0
+				this.lastReconnects = null
+				this.lastDropFrames = null
 				this.initSocket()
+				this.startTicker()
 			}
 		}
 	}
@@ -466,77 +554,14 @@
 		gap: 16px;
 	}
 
-	.overview-section {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
 	.section-title {
 		font-size: 15px;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
 
-	.overview-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-	}
-
-	.device-card {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		padding: 18px;
-		background: var(--bg-card);
-		border-radius: var(--radius-md);
-		border: 1px solid var(--border-color);
-		transition: all 0.2s ease;
-	}
-
-	.device-card:active {
-		transform: scale(0.98);
-	}
-
-	.device-icon {
-		font-size: 32px;
-	}
-
-	.device-info {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.device-name {
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.device-status {
-		font-size: 12px;
-		margin-top: 4px;
-	}
-
-	.device-status.active {
-		color: var(--success);
-		font-weight: 500;
-	}
-
-	.device-status.inactive {
-		color: var(--text-muted);
-	}
-
-	.device-value {
-		font-family: 'SF Mono', monospace;
-		font-size: 13px;
-		color: var(--text-secondary);
-		margin-top: 2px;
-	}
-
-	.control-section {
+	.control-section,
+	.overview-section {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
@@ -558,96 +583,6 @@
 		display: block;
 	}
 
-	.btn-grid-4 {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 8px;
-	}
-
-	.btn-grid-3 {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 8px;
-	}
-
-	.control-btn {
-		padding: 13px 8px;
-		border-radius: var(--radius-sm);
-		font-size: 11px;
-		font-weight: 600;
-		transition: all 0.2s ease;
-	}
-
-	.control-btn:active {
-		transform: scale(0.95);
-	}
-
-	.control-btn.high {
-		background: var(--danger-light);
-		color: var(--danger);
-		border: 1px solid var(--danger);
-	}
-
-	.control-btn.medium {
-		background: var(--warning-light);
-		color: var(--warning);
-		border: 1px solid var(--warning);
-	}
-
-	.control-btn.low {
-		background: var(--success-light);
-		color: var(--success);
-		border: 1px solid var(--success);
-	}
-
-	.control-btn.clear {
-		background: var(--bg-input);
-		color: var(--text-secondary);
-		border: 1px solid var(--border-color);
-	}
-
-	.control-btn.red {
-		background: var(--danger-light);
-		color: var(--danger);
-		border: 1px solid var(--danger);
-	}
-
-	.control-btn.yellow {
-		background: var(--warning-light);
-		color: var(--warning);
-		border: 1px solid var(--warning);
-	}
-
-	.control-btn.blue {
-		background: var(--info-light);
-		color: var(--info);
-		border: 1px solid var(--info);
-	}
-
-	.control-btn.off {
-		background: var(--bg-input);
-		color: var(--text-secondary);
-		border: 1px solid var(--border-color);
-	}
-
-	.control-btn.danger {
-		background: var(--danger-light);
-		color: var(--danger);
-		border: 1px solid var(--danger);
-	}
-
-	.control-btn.gray {
-		background: var(--bg-input);
-		color: var(--text-secondary);
-		border: 1px solid var(--border-color);
-	}
-
-	.control-btn.purple {
-		background: rgba(139, 92, 246, 0.15);
-		color: #8b5cf6;
-		border: 1px solid #8b5cf6;
-	}
-
 	.lcd-input {
 		width: 100%;
 		padding: 13px 14px;
@@ -664,7 +599,13 @@
 		border-color: var(--accent);
 	}
 
+	.btn-row {
+		display: flex;
+		gap: 10px;
+	}
+
 	.btn-primary {
+		flex: 1;
 		padding: 13px;
 		background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
 		border-radius: var(--radius-md);
@@ -678,10 +619,6 @@
 	.btn-primary:active {
 		transform: scale(0.98);
 		opacity: 0.9;
-	}
-
-	.w-full {
-		width: 100%;
 	}
 
 	.btn-secondary {
@@ -699,9 +636,102 @@
 		background: var(--bg-hover);
 	}
 
+	.btn-row .btn-secondary {
+		flex: 0 0 auto;
+		padding: 13px 18px;
+		font-size: 14px;
+	}
+
 	.btn-sm {
 		padding: 6px 10px;
 		font-size: 11px;
+	}
+
+	.source-info {
+		display: block;
+		margin-top: 12px;
+		padding: 8px 12px;
+		background: var(--bg-input);
+		border-radius: var(--radius-sm);
+		font-size: 12px;
+		color: var(--text-secondary);
+		font-family: monospace;
+		word-break: break-all;
+	}
+
+	.hint-box {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 14px 16px;
+		background: var(--bg-card);
+		border-radius: var(--radius-md);
+		border: 1px dashed var(--border-color);
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+
+	.hint-sub {
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+
+	.metric-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 10px;
+	}
+
+	.metric-card {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 14px;
+		background: var(--bg-card);
+		border-radius: var(--radius-md);
+		border: 1px solid var(--border-color);
+		transition: all 0.2s ease;
+	}
+
+	.metric-card:active {
+		transform: scale(0.98);
+	}
+
+	.metric-icon {
+		font-size: 24px;
+	}
+
+	.metric-info {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.metric-label {
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+
+	.metric-value {
+		font-family: 'SF Mono', monospace;
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.metric-value.value-good {
+		color: var(--success);
+	}
+
+	.metric-value.value-warn {
+		color: var(--warning);
+	}
+
+	.metric-value.value-bad {
+		color: var(--danger);
 	}
 
 	.log-section {
@@ -751,6 +781,7 @@
 	.log-message {
 		font-size: 12px;
 		color: var(--text-secondary);
+		word-break: break-all;
 	}
 
 	.log-message.command {
@@ -772,12 +803,8 @@
 			padding-bottom: calc(16px + 80px);
 		}
 
-		.overview-grid {
-			flex-direction: row;
-		}
-
-		.device-card {
-			flex: 1;
+		.metric-grid {
+			grid-template-columns: repeat(4, 1fr);
 		}
 	}
 </style>

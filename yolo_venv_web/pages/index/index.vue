@@ -470,9 +470,18 @@
 				}
 			},
 			showRiskAlertMessage(riskLevel, message) {
+				// 只在**风险等级由非 high 跃迁到 high** 的那一帧震动一次。
+				// 检测帧约 5~6 FPS，若每帧都震，手机会一直抖；判定用的是上一帧
+				// 已保存的 this.riskLevel，赋值前先取快照。
+				const prevLevel = this.riskLevel
 				this.riskLevel = riskLevel
 				this.riskMessage = message
 				this.showRiskAlert = true
+				if (riskLevel === 'high' && prevLevel !== 'high') {
+					try {
+						uni.vibrateShort({ fail: () => {} })
+					} catch (e) { /* 平台不支持震动时忽略 */ }
+				}
 				if (this.riskAlertTimer) clearTimeout(this.riskAlertTimer)
 				this.riskAlertTimer = setTimeout(() => {
 					this.showRiskAlert = false
