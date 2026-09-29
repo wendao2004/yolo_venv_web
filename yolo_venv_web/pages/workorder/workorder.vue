@@ -225,6 +225,7 @@
 		},
 		onShow() {
 			if (!this.socket) this.initSocket()
+			else if (this.socket.needsReconnect()) this.reconnect()
 			else this.loadRecords()
 			this.isDarkTheme = getApp().globalData.theme === 'dark'
 		},
@@ -238,6 +239,14 @@
 					icon: 'none',
 					duration: 1500
 				})
+			},
+			// onShow 检测到服务器地址变了时调用（见 api/websocket.js 的 needsReconnect）。
+			reconnect() {
+				if (this.socket) this.socket.close()
+				this.socket = null
+				this.isConnected = false
+				this.records = []
+				this.initSocket()
 			},
 			initSocket() {
 				this.socket = new DetectSocket()

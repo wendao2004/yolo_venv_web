@@ -247,6 +247,7 @@
 		},
 		onShow() {
 			if (!this.socket) this.initSocket()
+			else if (this.socket.needsReconnect()) this.reconnect()
 			this.isDarkTheme = getApp().globalData.theme === 'dark'
 			this.startTicker()
 		},

@@ -342,7 +342,10 @@
 			if (this.socket) this.socket.close()
 		},
 		onShow() {
+			// 用户可能在「硬件」页改过服务器地址 —— 本页还连着旧地址就必须重连，
+			// 否则 App 端改完地址要重启 App 才生效。
 			if (!this.socket) this.initSocket()
+			else if (this.socket.needsReconnect()) this.reconnect()
 			this.isDarkTheme = getApp().globalData.theme === 'dark'
 		},
 		methods: {

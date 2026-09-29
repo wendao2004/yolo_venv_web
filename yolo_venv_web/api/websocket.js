@@ -93,6 +93,15 @@ class DetectSocket {
 	 * 主机名复用 getUrl() 的解析结果，只把端口换成 8001 ——
 	 * 这样「硬件」页里改过服务器地址之后，图片地址会跟着一起变。
 	 */
+	/**
+	 * 存储里的服务器地址是不是已经变了（用户在「硬件」页改了地址，
+	 * 但本页还连着旧地址）。各页在 onShow 里用它决定要不要重连 ——
+	 * 否则 App 端改了地址后必须重启 App 才生效。
+	 */
+	needsReconnect() {
+		return !!this.socket && this.currentUrl !== this.getUrl()
+	}
+
 	httpBase() {
 		const m = /^wss?:\/\/([^:/]+)/.exec(this.getUrl())
 		const host = (m && m[1]) || 'localhost'
@@ -119,8 +128,11 @@ class DetectSocket {
 			//   · this.socket.close() 实际关的是第 1 个 → 关错对象
 			// 改成 socketTask.onOpen/onMessage/... 后，每个连接互相独立。
 			// （uni.connectSocket 本身会返回 socketTask，这行原代码就是对的，保留。）
+			const url = this.getUrl()
+			// 记下本次用的地址，供 needsReconnect() 比对（用户可能在「硬件」页改了地址）。
+			this.currentUrl = url
 			const socketTask = uni.connectSocket({
-				url: this.getUrl(),
+				url,
 				complete: () => {}
 			})
 
