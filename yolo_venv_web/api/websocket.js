@@ -56,7 +56,10 @@ class DetectSocket {
 				}
 				const pagePort = window.location.port
 				if (!wsHost && pagePort === '8001') {
-					return 'ws://localhost:8766'
+					// ⚠ 这里原来写死 'ws://localhost:8766'。手机上 localhost 是手机自己，
+					//   必然连不上 PC —— 这正是"手机打开 H5 一直是空的"的原因之一。
+					//   用当前页面的主机名即可；PC 上用 localhost 打开时结果完全一样。
+					return `ws://${window.location.hostname || 'localhost'}:8766`
 				}
 				if (!wsHost) wsHost = window.location.hostname || 'localhost'
 			} catch (e) {
