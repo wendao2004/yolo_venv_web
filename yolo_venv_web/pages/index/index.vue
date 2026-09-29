@@ -859,7 +859,13 @@
 	.video-wrapper {
 		position: relative;
 		width: 100%;
-		aspect-ratio: 4/3;
+		/* ⚠ 原来只有 `aspect-ratio: 4/3` 来撑高度，而 .video-frame 用的是 height:100%。
+		   一旦 aspect-ratio 没被采纳（部分 WebView/旧内核不支持，或被其它样式盖掉），
+		   容器高度就是 0 → 「数据是好的、保存记录里有图，但画面上什么都看不见」。
+		   这里改用 padding-top 撑出 4:3 的盒子，任何内核都稳；
+		   子元素改成绝对定位填满，不再依赖父级高度是否"确定"。 */
+		height: 0;
+		padding-top: 75%;            /* 4 : 3 */
 		background: var(--bg-card);
 		border-radius: var(--radius-lg);
 		overflow: hidden;
@@ -868,6 +874,9 @@
 	}
 
 	.video-frame {
+		position: absolute;
+		top: 0;
+		left: 0;
 		width: 100%;
 		height: 100%;
 		object-fit: contain;
@@ -1525,7 +1534,7 @@
 		}
 
 		.video-wrapper {
-			aspect-ratio: 16/9;
+			padding-top: 56.25%;      /* 16 : 9（与上面的 padding-top 撑高写法配套） */
 		}
 
 		.stats-grid {
