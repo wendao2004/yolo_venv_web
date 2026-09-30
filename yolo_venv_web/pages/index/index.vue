@@ -191,15 +191,13 @@
 
 		<view class="modal-overlay" :class="{ show: showModal }" @click="closeModal">
 			<view class="modal-content" @click.stop>
-				<!-- A4：专家打分模态显示的是**后端回来的 expert_image_data.image**，
-				     而不是本地缩略图；框走 drawExpertBoxes()（xywh→左上角）。 -->
+				<!-- 专家打分模态显示后端回来的 expert_image_data.image。
+				     检测框已由 server.py 用 draw_detection() **烧进图里**，
+				     所以这里不再叠一层自己画的框：既避免画两遍，也避免两套坐标系
+				     （叠加层用的是原图像素坐标，图被缩放后本来就对不齐）。 -->
 				<view v-if="expertImage" class="expert-stage">
 					<image :src="'data:image/jpeg;base64,' + expertImage.image" mode="aspectFit" class="modal-image">
 					</image>
-					<view v-for="(box, bi) in drawExpertBoxes()" :key="bi" class="expert-box"
-						:style="{ left: box.left + 'px', top: box.top + 'px', width: box.width + 'px', height: box.height + 'px' }">
-						<text class="expert-box-label">{{ box.label }}</text>
-					</view>
 				</view>
 				<image v-else-if="currentModalItem" :src="'data:image/jpeg;base64,' + currentModalItem.image"
 					mode="aspectFit" class="modal-image"></image>
@@ -426,9 +424,10 @@
 						duration: 2000
 					})
 				})
-				// A4：专家打分的真数据源。后端 process_expert_score 逐张回图，
-				// detections[] 是 **xywh 形状**（x,y 是中心点），与帧消息的 xyxy 不同，
-				// 所以画框必须走 drawExpertBoxes()，不能复用帧那套。
+				// A4：专家打分的真数据源。后端 process_expert_score 逐张回图。
+				// detections[] 仍是 **xywh 形状**（x,y 是中心点），但客户端**不再需要**
+				// 拿它画框 —— server.py 已经把框烧进 image 里了（见 send_expert_image），
+				// 这里只负责显示图片本身。
 				this.socket.on('expertImageData', (data) => {
 					this.expertImage = data
 					this.expertIndex = data.current_index || 0
@@ -672,26 +671,10 @@
 				this.expertTotal = 0
 				if (this.socket) this.socket.startExpertScore(this.folderPath || 'saved_captures')
 			},
-			// A4：画专家打分的框。**xywh（中心点）→ 左上角**必须减去 width/2、height/2，
-			// 这是与帧消息 xyxy 最大的区别（plan/01-后端协议参考.md §3.3）。
-			drawExpertBoxes() {
-				if (!this.expertImage) return []
-				const dets = this.expertImage.detections || []
-				return dets.map(d => {
-					const w = Number(d.width) || 0
-					const h = Number(d.height) || 0
-					// server.py:664-672 —— x,y 是**中心点**
-					const left = (Number(d.x) || 0) - w / 2
-					const top = (Number(d.y) || 0) - h / 2
-					return {
-						left,
-						top,
-						width: w,
-						height: h,
-						label: `${d.class_name || ''} ${(Number(d.confidence) || 0).toFixed(2)}`
-					}
-				})
-			},
+			// ⚠ 这里原来有个 drawExpertBoxes()：把 expert_image_data.detections[]
+			//   （xywh，x/y 是中心点）换算成左上角，再用绝对定位叠一层框在图上。
+			//   现在框由 server.py 直接烧进图片，客户端不再重复画 —— 那个方法连同
+			//   .expert-box / .expert-box-label 样式已一并删除，避免死代码。
 			resetStats() {
 				this.stats = {
 					...CLASS_STATS_INIT
@@ -762,28 +745,10 @@
 		border-radius: 6px;
 	}
 
-	/* 专家打分的图画布：框用绝对定位叠在图上 */
+	/* 专家打分的图画布（框已烧进图片，这里只负责放置图片本身） */
 	.expert-stage {
 		position: relative;
 		width: 100%;
-	}
-
-	.expert-box {
-		position: absolute;
-		border: 2px solid #ef4444;
-		border-radius: 2px;
-		box-sizing: border-box;
-	}
-
-	.expert-box-label {
-		position: absolute;
-		top: -16px;
-		left: -2px;
-		font-size: 10px;
-		color: #fff;
-		background: #ef4444;
-		padding: 0 4px;
-		white-space: nowrap;
 	}
 
 	.expert-meta {
