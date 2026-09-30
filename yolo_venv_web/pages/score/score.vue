@@ -246,6 +246,16 @@ export default {
           uni.showToast({ title: `已加载 ${data.count} 张记录`, icon: 'none', duration: 2000 })
         }
       })
+      // 一次打分跑完 -> 后端已把它存成一条记录（汇总 + 逐张明细）
+      this.socket.on('scoreRunSaved', (data) => {
+        if (!data || !data.success) return
+        this.stopAutoScore()
+        uni.showToast({
+          title: `已存为记录：${data.image_count} 张 / 检出 ${data.detections_total} 个`,
+          icon: 'none',
+          duration: 3000
+        })
+      })
       this.socket.connect().catch(() => {})
     },
     handleAutoScoreResult(data) {

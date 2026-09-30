@@ -196,6 +196,10 @@ class DetectSocket {
 		} else if (data.type === 'saved_captures_list') {
 			// A2：带元数据的完整截图清单
 			this.emit('savedCapturesList', data)
+		} else if (data.type === 'score_run_saved') {
+			// 一次自动打分跑完，后端已把它存成一条记录（汇总 + 逐张明细），
+			// 落在 saved_captures/scorerun_*.json，可在「病害记录」页查看。
+			this.emit('scoreRunSaved', data)
 		} else if (data.type === 's3_status') {
 			// A3：ESP32-S3 上报的状态。字段集尚未最终定稿（I-1 待 S3 上板，
 			// 见 plan/01-后端协议参考.md §5），所以原样透传，页面按可选字段读。

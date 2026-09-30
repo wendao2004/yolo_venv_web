@@ -67,66 +67,136 @@
 					<text class="empty-text">{{ emptyText }}</text>
 				</view>
 				<view v-for="item in filteredRecords" :key="item.file" class="order-card">
-					<view class="order-header">
-						<view class="order-id">
-							<text class="id-label">记录</text>
-							<text class="id-value">{{ item.file }}</text>
-						</view>
-						<view class="order-status-tag" :class="riskClassOf(item)">{{ riskLabelOf(item) }}</view>
-					</view>
-					<view class="order-body">
-						<view class="order-info-row">
-							<text class="info-label">采集时间</text>
-							<text class="info-value">{{ formatTime(item.mtime) }}</text>
-						</view>
-						<view class="order-info-row">
-							<text class="info-label">主要类别</text>
-							<view v-if="primaryTypeOf(item)" class="info-tag" :class="primaryTypeOf(item).cssClass">
-								{{ primaryTypeOf(item).name }}
+					<!-- ==================== 一次打分 = 一条汇总记录 ==================== -->
+					<view v-if="item.kind === 'score_run'">
+						<view class="order-header">
+							<view class="order-id">
+								<text class="id-label">打分</text>
+								<text class="id-value">{{ item.run.id }}</text>
 							</view>
-							<!-- 两种「没有类别」必须分开说：metadata 缺失是"这条记录没元数据"，
-							     metadata 在但 detection_list 为空是"那一帧确实没检出目标"。
-							     原来两种情况都显示「无元数据」，把后者说成了前者。 -->
-							<text v-else class="info-value muted">
-								{{ item.metadata ? '本帧无检出目标' : '无元数据' }}
-							</text>
+							<view class="order-status-tag run">打分记录</view>
 						</view>
-						<view class="order-info-row">
-							<text class="info-label">最高置信度</text>
-							<text class="info-value mono">{{ maxConfidenceOf(item) }}</text>
+						<view class="order-body">
+							<view class="order-info-row">
+								<text class="info-label">打分时间</text>
+								<text class="info-value">{{ formatTime(item.mtime) }}</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">图片张数</text>
+								<text class="info-value">{{ item.run.image_count }} 张</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">检出目标总数</text>
+								<text class="info-value">{{ item.run.detections_total }}</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">平均耗时</text>
+								<text class="info-value mono">{{ item.run.avg_time_ms }}ms</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">类别分布</text>
+								<text class="info-value">{{ runClassSummary(item) }}</text>
+							</view>
 						</view>
-						<view class="order-info-row">
-							<text class="info-label">检出目标数</text>
-							<text class="info-value">{{ targetCountOf(item) }}</text>
-						</view>
-						<view class="order-info-row">
-							<text class="info-label">文件大小</text>
-							<text class="info-value mono">{{ formatSize(item.size) }}</text>
+						<view class="order-footer">
+							<button class="action-btn-small primary" @click="openRun(item)">查看逐张明细</button>
 						</view>
 					</view>
-					<view class="order-footer">
-						<button class="action-btn-small primary" @click="openItem(item)">查看留证原图</button>
+
+					<!-- ==================== 单帧截图 ==================== -->
+					<view v-else>
+						<view class="order-header">
+							<view class="order-id">
+								<text class="id-label">记录</text>
+								<text class="id-value">{{ item.file }}</text>
+							</view>
+							<view class="order-status-tag" :class="riskClassOf(item)">{{ riskLabelOf(item) }}</view>
+						</view>
+						<view class="order-body">
+							<view class="order-info-row">
+								<text class="info-label">采集时间</text>
+								<text class="info-value">{{ formatTime(item.mtime) }}</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">主要类别</text>
+								<view v-if="primaryTypeOf(item)" class="info-tag" :class="primaryTypeOf(item).cssClass">
+									{{ primaryTypeOf(item).name }}
+								</view>
+								<!-- 两种「没有类别」必须分开说：metadata 缺失是"这条记录没元数据"，
+								     metadata 在但 detection_list 为空是"那一帧确实没检出目标"。
+								     原来两种情况都显示「无元数据」，把后者说成了前者。 -->
+								<text v-else class="info-value muted">
+									{{ item.metadata ? '本帧无检出目标' : '无元数据' }}
+								</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">最高置信度</text>
+								<text class="info-value mono">{{ maxConfidenceOf(item) }}</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">检出目标数</text>
+								<text class="info-value">{{ targetCountOf(item) }}</text>
+							</view>
+							<view class="order-info-row">
+								<text class="info-label">文件大小</text>
+								<text class="info-value mono">{{ formatSize(item.size) }}</text>
+							</view>
+						</view>
+						<view class="order-footer">
+							<button class="action-btn-small primary" @click="openItem(item)">查看留证原图</button>
+						</view>
+						<text v-if="!item.metadata" class="record-note">
+							该图早于「记录元数据」功能，只有原图，没有类别 / 置信度
+						</text>
 					</view>
-					<text v-if="!item.metadata" class="record-note">
-						该图早于「记录元数据」功能，只有原图，没有类别 / 置信度
-					</text>
 				</view>
 			</scroll-view>
 		</view>
 
 		<view class="modal-overlay" :class="{ show: showModal }" @click="closeModal">
 			<view class="modal-content" @click.stop>
-				<text class="modal-title">{{ currentItem ? currentItem.file : '' }}</text>
-				<image v-if="currentItem" :src="imageUrlOf(currentItem)" mode="widthFix" class="modal-image"
-					@error="onImageError"></image>
-				<text v-if="imageError" class="modal-error">原图加载失败：{{ imageUrlOf(currentItem) }}</text>
-				<view v-if="currentDetections.length" class="modal-meta">
-					<view v-for="(det, i) in currentDetections" :key="i" class="modal-meta-row">
-						<text class="modal-meta-name">{{ det.name }}</text>
-						<text class="modal-meta-conf mono">{{ (det.confidence * 100).toFixed(1) }}%</text>
-					</view>
+				<!-- ---------- 打分运行：列出逐张明细 ---------- -->
+				<view v-if="currentRun">
+					<text class="modal-title">{{ currentRun.run.id }}</text>
+					<text class="modal-run-summary">
+						{{ currentRun.run.image_count }} 张 · 检出 {{ currentRun.run.detections_total }} 个 ·
+						平均 {{ currentRun.run.avg_time_ms }}ms · {{ formatTime(currentRun.mtime) }}
+					</text>
+					<scroll-view scroll-y class="modal-run-list">
+						<view v-for="(it, i) in runItemsOf(currentRun)" :key="i" class="run-item">
+							<view class="run-item-head">
+								<text class="run-item-name">{{ i + 1 }}. {{ it.image_name }}</text>
+								<text class="run-item-time mono">{{ it.time_ms }}ms</text>
+							</view>
+							<view v-if="(it.detections || []).length" class="run-item-dets">
+								<view v-for="(d, j) in it.detections" :key="j" class="modal-meta-row">
+									<text class="modal-meta-name">{{ displayNameOf(d.class_name) }}</text>
+									<text class="modal-meta-conf mono">{{ (d.confidence * 100).toFixed(1) }}%</text>
+								</view>
+							</view>
+							<text v-else class="run-item-empty">本张无检出</text>
+						</view>
+						<view v-if="runItemsOf(currentRun).length === 0" class="empty-log">
+							<text>这条记录没有逐张明细</text>
+						</view>
+					</scroll-view>
 				</view>
-				<text v-else class="modal-no-meta">该记录无检测明细</text>
+
+				<!-- ---------- 单帧截图：原图 + 检测明细 ---------- -->
+				<view v-else>
+					<text class="modal-title">{{ currentItem ? currentItem.file : '' }}</text>
+					<image v-if="currentItem" :src="imageUrlOf(currentItem)" mode="widthFix" class="modal-image"
+						@error="onImageError"></image>
+					<text v-if="imageError" class="modal-error">原图加载失败：{{ imageUrlOf(currentItem) }}</text>
+					<view v-if="currentDetections.length" class="modal-meta">
+						<view v-for="(det, i) in currentDetections" :key="i" class="modal-meta-row">
+							<text class="modal-meta-name">{{ det.name }}</text>
+							<text class="modal-meta-conf mono">{{ (det.confidence * 100).toFixed(1) }}%</text>
+						</view>
+					</view>
+					<text v-else class="modal-no-meta">该记录无检测明细</text>
+				</view>
+
 				<button class="modal-btn close" @click="closeModal">关闭</button>
 			</view>
 		</view>
@@ -165,6 +235,8 @@
 				riskOptions: ['全部', '高风险', '中风险', '无风险', '无元数据'],
 				sortOptions: ['最新在前', '最早在前'],
 				currentItem: null,
+				// 当前打开的是「打分运行记录」时的对象（与 currentItem 二选一）
+				currentRun: null,
 				showModal: false,
 				imageError: false,
 				isDarkTheme: getTheme() === 'dark',
@@ -177,6 +249,11 @@
 				const typeKey = TYPE_KEYS[this.selectedType]
 				if (typeKey) {
 					result = result.filter(item => {
+						// 打分运行记录没有逐条 detection_list，按 class_counts 的键匹配。
+						if (item.kind === 'score_run') {
+							return Object.keys((item.run && item.run.class_counts) || {})
+								.some(name => mapBackendKey(name) === typeKey)
+						}
 						const dets = this.detectionListOf(item)
 						return dets.some(d => mapBackendKey(d.class_name) === typeKey)
 					})
@@ -184,6 +261,9 @@
 				if (this.selectedRisk > 0) {
 					const want = ['', 'high', 'medium', 'normal', 'none'][this.selectedRisk]
 					result = result.filter(item => {
+						// 打分运行记录是一次批量测试的汇总，本身不带风险等级 ——
+						// 选了具体风险就把它排掉，别让它混在"高风险"里误导。
+						if (item.kind === 'score_run') return false
 						const meta = item.metadata
 						if (want === 'none') return !meta
 						if (!meta) return false
@@ -351,12 +431,37 @@
 			},
 			openItem(item) {
 				this.currentItem = item
+				this.currentRun = null
 				this.imageError = false
 				this.showModal = true
+			},
+			// 打分运行记录：没有单张原图，弹窗里列逐张明细。
+			openRun(item) {
+				this.currentRun = item
+				this.currentItem = null
+				this.imageError = false
+				this.showModal = true
+			},
+			runItemsOf(item) {
+				if (!item || !item.run || !Array.isArray(item.run.items)) return []
+				return item.run.items
+			},
+			// 把 class_counts 渲染成「道路积水×3 路面坑洼×8」这种一行摘要。
+			runClassSummary(item) {
+				const counts = (item && item.run && item.run.class_counts) || {}
+				const parts = Object.keys(counts).map(name => {
+					const info = getDisplayInfo(mapBackendKey(name))
+					return `${info.name}×${counts[name]}`
+				})
+				return parts.length ? parts.join('  ') : '无检出'
+			},
+			displayNameOf(className) {
+				return getDisplayInfo(mapBackendKey(className)).name
 			},
 			closeModal() {
 				this.showModal = false
 				this.currentItem = null
+				this.currentRun = null
 			},
 			onImageError() {
 				this.imageError = true
@@ -673,6 +778,11 @@
 		color: var(--text-muted);
 	}
 
+	.order-status-tag.run {
+		background: var(--accent-light, rgba(79, 70, 229, 0.15));
+		color: var(--accent);
+	}
+
 	.order-body {
 		padding: 16px;
 	}
@@ -846,6 +956,66 @@
 		display: block;
 		text-align: center;
 		padding: 12px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	/* ---- 打分运行记录（逐张明细）---- */
+	.modal-run-summary {
+		display: block;
+		font-size: 12px;
+		color: var(--text-secondary);
+		margin-bottom: 10px;
+	}
+
+	.modal-run-list {
+		max-height: 52vh;
+	}
+
+	.run-item {
+		padding: 10px 0;
+	}
+
+	.run-item:not(:last-child) {
+		border-bottom: 1px solid var(--border-light);
+	}
+
+	.run-item-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.run-item-name {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.run-item-time {
+		font-size: 11px;
+		color: var(--text-muted);
+		flex-shrink: 0;
+	}
+
+	.run-item-dets {
+		margin-top: 4px;
+	}
+
+	.run-item-empty {
+		display: block;
+		font-size: 11px;
+		color: var(--text-disabled);
+		margin-top: 4px;
+	}
+
+	.empty-log {
+		padding: 24px;
+		text-align: center;
 		font-size: 12px;
 		color: var(--text-muted);
 	}
