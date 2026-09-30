@@ -47,7 +47,8 @@
       <view class="preview-section">
         <text class="section-title">实时预览</text>
         <view class="preview-card">
-          <image v-if="currentImage" :src="imageSrc" mode="aspectFit" class="preview-image"></image>
+          <image v-if="currentImage" :src="imageSrc" mode="aspectFit" class="preview-image"
+            @error="onFrameImageError"></image>
           <view v-else class="preview-placeholder">
             <text class="placeholder-icon">📷</text>
             <text>等待开始测试</text>
@@ -157,6 +158,10 @@ export default {
       testDir: 'saved_captures',
       targetCount: 20,
       currentImage: '',
+      // H5：用可回收的 Blob URL 显示当前这张，避免每张图都留下一个被浏览器
+      // 缓存的 data URL 位图（见 setFrameImage）。
+      frameObjectUrl: '',
+      useBlobUrl: true,
       results: [],
       totalTime: 0,
       isDarkTheme: getTheme() === 'dark',
@@ -165,6 +170,9 @@ export default {
   },
   computed: {
     imageSrc() {
+      // #ifdef H5
+      if (this.useBlobUrl && this.frameObjectUrl) return this.frameObjectUrl
+      // #endif
       if (!this.currentImage) return ''
       if (this.currentImage.startsWith('data:')) return this.currentImage
       return 'data:image/jpeg;base64,' + this.currentImage
@@ -218,6 +226,13 @@ export default {
     this.initSocket()
   },
   onUnload() {
+    // 回收最后一张的 Blob URL
+    // #ifdef H5
+    if (this.frameObjectUrl) {
+      try { URL.revokeObjectURL(this.frameObjectUrl) } catch (e) {}
+      this.frameObjectUrl = ''
+    }
+    // #endif
     if (this.socket) this.socket.close()
     if (this.timer) clearInterval(this.timer)
   },
@@ -260,11 +275,43 @@ export default {
     },
     handleAutoScoreResult(data) {
       if (!this.isRunning) return
-      this.currentImage = data.image || ''
+      this.setFrameImage(data.image || '')
       this.totalTime += data.time_ms || 0
       this.currentIndex++
       this.results.push({ image_name: data.image_name || '', detections: data.detections || [], time_ms: data.time_ms || 0 })
       if (this.currentIndex >= this.totalImages) this.stopAutoScore()
+    },
+    // 与智检页同一套：base64 → Blob → createObjectURL，并在换图时回收上一张。
+    // 打分一次最多推 N 张图，每张都是一个唯一的 data URL，浏览器会逐张缓存位图
+    // （一张 640×480 解码约 1.2 MB），不回收的话跑一轮就涨几十上百 MB。
+    setFrameImage(b64) {
+      this.currentImage = b64 || ''
+      // #ifdef H5
+      if (!this.useBlobUrl || !b64) return
+      try {
+        const bin = atob(b64)
+        const bytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }))
+        const old = this.frameObjectUrl
+        this.frameObjectUrl = url
+        if (old) { try { URL.revokeObjectURL(old) } catch (e) {} }
+      } catch (e) {
+        console.warn('[score] Blob URL 失败，退回 data URL:', e)
+        this.useBlobUrl = false
+        this.frameObjectUrl = ''
+      }
+      // #endif
+    },
+    onFrameImageError() {
+      // #ifdef H5
+      if (this.frameObjectUrl) {
+        console.warn('[score] Blob URL 无法显示，退回 data URL')
+        try { URL.revokeObjectURL(this.frameObjectUrl) } catch (e) {}
+        this.frameObjectUrl = ''
+        this.useBlobUrl = false
+      }
+      // #endif
     },
     startAutoScore() {
       if (!this.socket || !this.isConnected) { uni.showToast({ title: '请先连接', icon: 'none', duration: 2000 }); return }

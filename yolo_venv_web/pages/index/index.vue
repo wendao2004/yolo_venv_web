@@ -23,7 +23,8 @@
 		<view class="main-content">
 			<view class="video-section">
 				<view class="video-wrapper">
-					<image v-if="currentImage" :src="imageSrc" mode="aspectFit" class="video-frame"></image>
+					<image v-if="currentImage" :src="imageSrc" mode="aspectFit" class="video-frame"
+						@error="onFrameImageError"></image>
 					<view v-else class="video-placeholder">
 						<!-- <text class="placeholder-icon">📷</text> -->
 						<text class="placeholder-text">等待视频流...</text>
@@ -233,6 +234,10 @@
 				socket: null,
 				isConnected: false,
 				currentImage: '',
+				// H5 上给 <image> 用的 Blob URL（见 setFrameImage 的长注释）。
+				// ⚠ 每帧必须回收上一帧，否则浏览器会把每一帧的位图都缓存住 → 内存持续上涨。
+				frameObjectUrl: '',
+				useBlobUrl: true,
 				frameIndex: 0,
 				fps: 0,
 				currentDetections: [],
@@ -275,6 +280,11 @@
 		},
 		computed: {
 			imageSrc() {
+				// H5：优先用可回收的 Blob URL（见 setFrameImage）。App 端没有
+				// URL.createObjectURL，走下面的 data URL 分支。
+				// #ifdef H5
+				if (this.useBlobUrl && this.frameObjectUrl) return this.frameObjectUrl
+				// #endif
 				if (!this.currentImage) return ''
 				if (this.currentImage.startsWith('data:')) return this.currentImage
 				return 'data:image/jpeg;base64,' + this.currentImage
@@ -339,6 +349,13 @@
 			this.initSocket()
 		},
 		onUnload() {
+			// 回收最后一帧的 Blob URL，避免页面销毁后还占着一块图
+			// #ifdef H5
+			if (this.frameObjectUrl) {
+				try { URL.revokeObjectURL(this.frameObjectUrl) } catch (e) {}
+				this.frameObjectUrl = ''
+			}
+			// #endif
 			if (this.socket) this.socket.close()
 		},
 		onShow() {
@@ -445,7 +462,7 @@
 				this.socket.connect().catch(() => {})
 			},
 			handleFrame(data) {
-				this.currentImage = data.image || ''
+				this.setFrameImage(data.image || '')
 				this.frameIndex = data.frameIndex || 0
 				this.fps = data.fps || 0
 				this.currentDetections = data.detections || []
@@ -471,6 +488,54 @@
 					const key = mapBackendKey(className)
 					if (key && this.stats[key] !== undefined) this.stats[key]++
 				}
+			},
+			// 把一帧 base64 交给 <image> 显示。
+			//
+			// 🔴 2026-09-30 修【H5 内存持续上涨】：
+			//   原来每帧直接 `currentImage = data.image`，模板里拼成
+			//   'data:image/jpeg;base64,...' 交给 <image>。而 data URL 是按
+			//   **整串字符串**做缓存的 —— 每帧都是一个全新的唯一 URL，于是浏览器
+			//   把**每一帧解码后的位图**都留在图片缓存里（640×480 解码后约 1.2 MB），
+			//   5~6 帧/秒 → 内存一路涨，GC 也救不了（缓存在浏览器内部）。
+			//   这正是对接文档 §6.3 里"不要缓存多帧"那条。
+			//   现在改成 base64 → Blob → createObjectURL，并在换帧时
+			//   **revokeObjectURL 回收上一帧**，任何时刻只有一个活着的图 URL。
+			//
+			// ⚠ 只对 H5 生效（App 端没有 URL.createObjectURL）；失败会自动退回
+			//   data URL，最坏情况回到老行为，不会把画面弄没。
+			setFrameImage(b64) {
+				this.currentImage = b64 || ''
+				// #ifdef H5
+				if (!this.useBlobUrl || !b64) return
+				try {
+					const bin = atob(b64)
+					const bytes = new Uint8Array(bin.length)
+					for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+					const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }))
+					// 先建新、再回收旧：中间不会出现"没有可用 URL"的空档
+					const old = this.frameObjectUrl
+					this.frameObjectUrl = url
+					if (old) {
+						try { URL.revokeObjectURL(old) } catch (e) { /* 已被回收 */ }
+					}
+				} catch (e) {
+					console.warn('[frame] Blob URL 失败，退回 data URL:', e)
+					this.useBlobUrl = false
+					this.frameObjectUrl = ''
+				}
+				// #endif
+			},
+			// <image> 加载失败：多半是 Blob URL 不被支持 —— 永久退回 data URL，
+			// 保证画面还在（代价是内存又回到老样子，所以只打一条警告，不静默）。
+			onFrameImageError() {
+				// #ifdef H5
+				if (this.frameObjectUrl) {
+					console.warn('[frame] Blob URL 无法显示，退回 data URL（内存会重新上涨）')
+					try { URL.revokeObjectURL(this.frameObjectUrl) } catch (e) {}
+					this.frameObjectUrl = ''
+					this.useBlobUrl = false
+				}
+				// #endif
 			},
 			showRiskAlertMessage(riskLevel, message) {
 				// 只在**风险等级由非 high 跃迁到 high** 的那一帧震动一次。
@@ -526,6 +591,10 @@
 					status: null
 				}
 				this.thumbnails.unshift(item)
+				// ⚠ 缩略图每条都攥着一整帧 base64（~65 KB），原来**无上限**增长。
+				//   它渲染的是 data URL，同样会被浏览器按 URL 缓存位图 —— 保存几十条
+				//   就是几十 MB。这里只保留最近 20 条（够看，且不会把内存拖爆）。
+				if (this.thumbnails.length > 20) this.thumbnails = this.thumbnails.slice(0, 20)
 				for (const det of this.currentFrameData.detections) {
 					const className = det.class_name || det.class
 					const key = mapBackendKey(className)
