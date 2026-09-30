@@ -338,8 +338,11 @@ export default {
 
 .preview-section { display: flex; flex-direction: column; gap: 12px; }
 .section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-.preview-card { position: relative; width: 100%; aspect-ratio: 4/3; background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-color); box-shadow: var(--shadow-md); }
-.preview-image { width: 100%; height: 100%; object-fit: contain; }
+/* ⚠ 高度不能只靠 aspect-ratio：.preview-image 用的是 height:100%，父级高度一旦算成 0
+   （部分内核不采纳 aspect-ratio），就变成「数据有、图看不见」。与智检页 [A12] 同一处问题。
+   改用 padding-top 撑盒子 + 图片绝对定位填满。 */
+.preview-card { position: relative; width: 100%; height: 0; padding-top: 75%; background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-color); box-shadow: var(--shadow-md); }
+.preview-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
 .preview-placeholder { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: linear-gradient(145deg, var(--bg-card) 0%, var(--bg-secondary) 100%); }
 .placeholder-icon { font-size: 56px; opacity: 0.2; animation: float 3s ease-in-out infinite; }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
@@ -387,6 +390,6 @@ export default {
 @media screen and (min-width: 768px) {
   .main-content { padding-bottom: calc(16px + 80px); }
   .stats-grid { grid-template-columns: repeat(4, 1fr); }
-  .preview-card { aspect-ratio: 16/9; }
+  .preview-card { padding-top: 56.25%; }   /* 16:9，与上面的撑高写法配套 */
 }
 </style>
